@@ -183,6 +183,21 @@ export default function Login() {
     }
   }
 
+  useEffect(() => {
+  let mounted = true;
+  (async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!mounted) return;
+    const user = data?.user;
+    if (user) {
+      setAppilixIdentity(user.email ?? user.id);
+    }
+  })();
+  return () => {
+    mounted = false;
+  };
+}, []);
+
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
