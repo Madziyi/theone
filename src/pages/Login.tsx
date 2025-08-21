@@ -2,6 +2,28 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
+function setAppilixIdentity(identity: string | null | undefined) {
+  if (!identity) return;
+
+  // Prefer updating an existing tag so we don’t append duplicates
+  const existing = document.getElementById("appilix-identity-script") as
+    | HTMLScriptElement
+    | null;
+
+  const js = `var appilix_push_notification_user_identity = ${JSON.stringify(identity)};`;
+
+  if (existing) {
+    // Update the contents safely
+    existing.textContent = js;
+  } else {
+    const script = document.createElement("script");
+    script.id = "appilix-identity-script";
+    script.type = "text/javascript";
+    script.textContent = js; // safer than innerHTML
+    document.body.appendChild(script);
+  }
+}
+
 type Profession =
   | "student"
   | "fisher"
@@ -99,14 +121,15 @@ export default function Login() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
+      const user = data.user;
+
+    // Set Appilix identity (choose email or id)
+    setAppilixIdentity(user?.email ?? user?.id);
+
       const userId = data.user?.id;
       let userFirst = "";
       let teamLogo: string | null = null;
       let teamName: string | null = null;
-
-      const script = document.createElement("script");
-      script.innerHTML = `var appilix_push_notification_user_identity = "${data.user?.email}";`;
-      document.body.appendChild(script);
 
       if (userId) {
         // Ensure team context is ready (and possibly join invite team)
