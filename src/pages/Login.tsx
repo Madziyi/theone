@@ -104,6 +104,10 @@ export default function Login() {
       let teamLogo: string | null = null;
       let teamName: string | null = null;
 
+      const script = document.createElement("script");
+      script.innerHTML = `var appilix_push_notification_user_identity = "${data.user?.email}";`;
+      document.body.appendChild(script);
+
       if (userId) {
         // Ensure team context is ready (and possibly join invite team)
         await ensureActiveTeamForUser(userId, pendingTeamId);
