@@ -1,5 +1,5 @@
 // src/pages/Monitor.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useTeam } from "@/contexts/TeamContext";
 
@@ -52,6 +52,55 @@ type Settings = {
   show_webcam: boolean;
   tile_density: "comfortable" | "compact";
 };
+
+/* Alert events (for live toasts) */
+type AlertEventKind =
+  | "threshold"
+  | "rate_of_change"
+  | "trend"
+  | "rolling_avg"
+  | "vertical_gradient"
+  | "cross_parameter"
+  | "spatial_delta"
+  | "spatial_coverage";
+
+type AlertEventSeverity = "info" | "warning" | "critical" | string;
+
+type AlertEvent = {
+  id: string;
+  team_id: string;
+  rule_id: string;
+  kind: AlertEventKind;
+  severity: AlertEventSeverity;
+  buoy_id: number | null;
+  parameter_id: number | null;
+  measured_at: string; // ISO
+  created_at: string;  // ISO
+  value: number | null;
+  throttled: boolean;
+  notified: boolean;
+  message: string;
+  context: any; // { param_label, buoy_name, measured_at_fmt, ... }
+};
+
+const KIND_LABEL: Record<string, string> = {
+  threshold: "Threshold",
+  rate_of_change: "Rate of change",
+  trend: "Trend",
+  rolling_avg: "Rolling average",
+  vertical_gradient: "Vertical gradient",
+  cross_parameter: "Cross-parameter",
+  spatial_delta: "Spatial delta",
+  spatial_coverage: "Spatial coverage",
+};
+
+function chipColor(sev: string) {
+  switch (sev) {
+    case "critical": return "bg-red-500/4 text-red-500 border-red-500/30";
+    case "warning":  return "bg-amber-500/4 text-amber-500 border-amber-500/30";
+    default:         return "bg-sky-500/4 text-sky-400 border-sky-500/30";
+  }
+}
 
 /* ---------- utils ---------- */
 function timeAgo(iso?: string | null) {
@@ -106,7 +155,7 @@ function statusClasses(c: "green" | "yellow" | "red" | "gray") {
     case "yellow":
       return "border-yellow-300 bg-yellow-50 dark:bg-yellow-950/30";
     case "red":
-      return "border-red-300 bg-red-50 dark:bg-red-950/30 alert-ring"; // blinking
+      return "border-red-300 bg-red-50 dark:bg-red-950/30 alert-ring";
     default:
       return "border-border bg-card";
   }
@@ -150,7 +199,6 @@ function VideoTile({ src }: { src: string }) {
     const video = videoRef.current;
     if (!video) return;
 
-    // Safari & some browsers support HLS natively:
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = src;
       video.play().catch(() => {});
@@ -165,15 +213,12 @@ function VideoTile({ src }: { src: string }) {
         hls.loadSource(src);
         hls.attachMedia(video);
       } else {
-        // fallback: try direct src anyway
         video.src = src;
       }
     })();
 
     return () => {
-      try {
-        hls?.destroy?.();
-      } catch {}
+      try { hls?.destroy?.(); } catch {}
     };
   }, [src, isHls]);
 
@@ -219,6 +264,66 @@ export default function Monitor() {
   const [cycleIndex, setCycleIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
+  /* --- Live alert toasts --- */
+  type Toast = {
+    id: string; // alert_event id
+    severity: string;
+    title: string;
+    time: string; // local HH:MM
+    message: string;
+    throttled: boolean;
+  };
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const recentIdsRef = useRef<Set<string>>(new Set());
+
+  const pushToast = useCallback((row: AlertEvent) => {
+    // de-dupe by id
+    if (recentIdsRef.current.has(row.id)) return;
+    recentIdsRef.current.add(row.id);
+    // prune set size
+    if (recentIdsRef.current.size > 200) {
+      recentIdsRef.current = new Set(Array.from(recentIdsRef.current).slice(-100));
+    }
+
+    const ctx = row.context ?? {};
+    const titleParam = ctx.param_label ?? ctx.base_param_label ?? ctx.param_name ?? "—";
+    const title = `${KIND_LABEL[row.kind] ?? row.kind} • ${titleParam}`;
+    const t = new Date(row.measured_at || row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    setToasts((prev) => [
+      {
+        id: row.id,
+        severity: row.severity,
+        title,
+        time: t,
+        message: row.message,
+        throttled: !!row.throttled,
+      },
+      ...prev,
+    ].slice(0, 5)); // cap to 5 visible
+  }, []);
+
+  // Subscribe to live alert events for this team
+  useEffect(() => {
+    if (!currentTeamId) return;
+    const ch = supabase.channel("alert-events-monitor")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "alert_events", filter: `team_id=eq.${currentTeamId}` },
+        (payload) => pushToast(payload.new as AlertEvent)
+      )
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") console.log("[monitor] realtime: SUBSCRIBED");
+        if (status === "TIMED_OUT") console.warn("[monitor] realtime: TIMED_OUT");
+        if (status === "CHANNEL_ERROR") console.warn("[monitor] realtime: CHANNEL_ERROR");
+        if (status === "CLOSED") console.warn("[monitor] realtime: CLOSED");
+      });
+    return () => { supabase.removeChannel(ch); };
+  }, [currentTeamId, pushToast]);
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
   /* blinking CSS (drop-in) */
   useEffect(() => {
     const css = `
@@ -228,9 +333,7 @@ export default function Monitor() {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.appendChild(style);
-    return () => {
-      document.head.removeChild(style);
-    };
+    return () => { document.head.removeChild(style); };
   }, []);
 
   /* settings */
@@ -246,7 +349,6 @@ export default function Monitor() {
         setSettings(data as any);
         setLayout((data as any).layout_mode);
       } else {
-        // local defaults if no row exists
         const d: Settings = {
           team_id: currentTeamId,
           layout_mode: "grid",
@@ -294,7 +396,7 @@ export default function Monitor() {
         supabase
           .from("buoys")
           .select("buoy_id,name,location_nickname,webcam,latitude,longitude")
-        .in("buoy_id", ids),
+          .in("buoy_id", ids),
         supabase
           .from("monitor_tiles")
           .select("id,team_id,buoy_id,parameter_id,thresholds_id,depth,label,order_index")
@@ -326,17 +428,12 @@ export default function Monitor() {
       setTiles(merged as any[]);
       setLoading(false);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [currentTeamId]);
 
   /* params for all tiles */
   useEffect(() => {
-    if (tiles.length === 0) {
-      setParams({});
-      return;
-    }
+    if (tiles.length === 0) { setParams({}); return; }
     let cancelled = false;
     (async () => {
       const keyset = new Set(tiles.map((t) => `${t.buoy_id},${t.parameter_id}`));
@@ -359,9 +456,7 @@ export default function Monitor() {
       for (const r of results) map[`${r.buoy_id},${r.parameter_id}`] = r;
       setParams(map);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [tiles]);
 
   /* thresholds */
@@ -369,10 +464,7 @@ export default function Monitor() {
     const ids = Array.from(
       new Set(tiles.map((t) => t.thresholds_id).filter((x): x is number => !!x))
     );
-    if (ids.length === 0) {
-      setThresholds({});
-      return;
-    }
+    if (ids.length === 0) { setThresholds({}); return; }
     let cancelled = false;
     (async () => {
       const { data } = await supabase
@@ -384,9 +476,7 @@ export default function Monitor() {
       for (const r of (data ?? []) as Threshold[]) map[r.id] = r;
       setThresholds(map);
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [tiles]);
 
   /* latest values: refresh ~30s */
@@ -420,10 +510,7 @@ export default function Monitor() {
     if (tiles.length) {
       loadLatest();
       const id = setInterval(loadLatest, 30_000);
-      return () => {
-        cancelled = true;
-        clearInterval(id);
-      };
+      return () => { cancelled = true; clearInterval(id); };
     } else {
       setLatest({});
     }
@@ -465,10 +552,7 @@ export default function Monitor() {
     if (tiles.length) {
       loadSparks();
       const id = setInterval(loadSparks, 5 * 60_000);
-      return () => {
-        cancelled = true;
-        clearInterval(id);
-      };
+      return () => { cancelled = true; clearInterval(id); };
     } else {
       setSparks({});
     }
@@ -499,35 +583,46 @@ export default function Monitor() {
     return Array.from(set);
   }, [tiles, latest, thresholds]);
 
-  /* spotlight scheduler */
+  /* === Spotlight scheduler (fixed) === */
+  const timerRef = useRef<number | null>(null);
   useEffect(() => {
-    if (layout !== "spotlight" || buoyIds.length === 0) return;
-    let dwellTimeout: any;
-    let interval: any;
+    if (layout !== "spotlight" || buoyIds.length === 0 || paused) return;
 
-    const cycleSecs = settings?.cycle_seconds ?? 15;
-    const dwellSecs = settings?.dwell_on_alert_seconds ?? 30;
+    const cycle = settings?.cycle_seconds ?? 15;
 
-    const step = () => setCycleIndex((i) => (i + 1) % buoyIds.length);
+    const critIdxs = criticalBuoys
+      .map((id) => buoyIds.indexOf(id))
+      .filter((i) => i >= 0);
 
-    if (!paused && criticalBuoys.length > 0) {
-      const focus = criticalBuoys[0];
-      const idx = buoyIds.indexOf(focus);
-      if (idx >= 0) setCycleIndex(idx);
-      dwellTimeout = setTimeout(() => {
-        if (!paused) interval = setInterval(step, cycleSecs * 1000);
-      }, dwellSecs * 1000);
-    } else if (!paused) {
-      interval = setInterval(step, cycleSecs * 1000);
+    const list = (critIdxs.length ? critIdxs : buoyIds.map((_, i) => i));
+
+    let pos = list.indexOf(cycleIndex);
+    if (pos < 0) pos = 0;
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
+
+    const tick = () => {
+      pos = (pos + 1) % list.length;
+      setCycleIndex(list[pos]);
+      timerRef.current = window.setTimeout(tick);
+    };
+
+    timerRef.current = window.setTimeout(tick);
+
     return () => {
-      clearInterval(interval);
-      clearTimeout(dwellTimeout);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [
     layout,
     paused,
     buoyIds,
+    cycleIndex,
     criticalBuoys,
     settings?.cycle_seconds,
     settings?.dwell_on_alert_seconds,
@@ -558,20 +653,14 @@ export default function Monitor() {
       <div className="rounded-lg border border-border bg-card px-2 py-1 text-xs">
         Layout:
         <button
-          className={`ml-2 rounded px-2 py-1 ${
-            layout === "grid" ? "bg-primary text-white" : "hover:bg-accent/30"
-          }`}
+          className={`ml-2 rounded px-2 py-1 ${layout === "grid" ? "bg-primary text-white" : "hover:bg-accent/30"}`}
           onClick={() => (isManager ? saveSettings({ layout_mode: "grid" }) : setLayout("grid"))}
         >
           Grid (g)
         </button>
         <button
-          className={`ml-1 rounded px-2 py-1 ${
-            layout === "spotlight" ? "bg-primary text-white" : "hover:bg-accent/30"
-          }`}
-          onClick={() =>
-            isManager ? saveSettings({ layout_mode: "spotlight" }) : setLayout("spotlight")
-          }
+          className={`ml-1 rounded px-2 py-1 ${layout === "spotlight" ? "bg-primary text-white" : "hover:bg-accent/30"}`}
+          onClick={() => (isManager ? saveSettings({ layout_mode: "spotlight" }) : setLayout("spotlight"))}
         >
           Spotlight (s)
         </button>
@@ -601,6 +690,37 @@ export default function Monitor() {
   /* render */
   return (
     <section className="mx-auto max-w-[1400px] px-3 py-4 space-y-4">
+      {/* Live alert toasts (top-right) */}
+      <div
+        className="pointer-events-none fixed right-3 top-3 z-[2000] flex w-[min(92vw,420px)] flex-col gap-2"
+        role="status"
+        aria-live="polite"
+      >
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`pointer-events-auto rounded-xl border bg-card p-3 shadow-soft ${chipColor(t.severity)}`}
+          >
+            <div className="flex items-start gap-2">
+              <div className="grid min-w-0">
+                <div className="text-sm font-semibold truncate">{t.title}</div>
+                <div className="mt-1 text-xs opacity-80">{t.time}{t.throttled ? " • throttled" : ""}</div>
+              </div>
+              <button
+                onClick={() => dismissToast(t.id)}
+                className="ml-auto rounded-md border border-current/30 px-2 py-0.5 text-xs hover:bg-white/10"
+                aria-label="Dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-background p-2 text-[12px] leading-5">
+{t.message}
+            </pre>
+          </div>
+        ))}
+      </div>
+
       {/* header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-lg font-semibold">Monitor</div>
@@ -670,11 +790,6 @@ export default function Monitor() {
                         <span className="ml-1 text-sm text-muted">{unit}</span>
                       </div>
                       <div className="mt-1 text-xs text-muted">{timeAgo(last?.measured_at)}</div>
-                      {t.depth != null && (
-                        <div className="mt-0.5 text-[11px] text-muted">
-                          Depth: {Number(t.depth).toFixed(1)} m
-                        </div>
-                      )}
                       {series.length > 1 && <Sparkline points={series} />}
                     </div>
                   );
@@ -684,31 +799,27 @@ export default function Monitor() {
           );
         })
       ) : (
-        /* SPOTLIGHT: one buoy at a time */
+        /* SPOTLIGHT: same grid style; webcam is just another tile */
         (() => {
           const bId = buoyIds[cycleIndex] ?? buoyIds[0];
           const b = buoysById[bId];
           const list = groupedByBuoy[bId] ?? [];
           return (
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Left: big webcam if present */}
-              <div className="space-y-3 lg:col-span-1">
-                <div className="rounded-2xl border border-border bg-card p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-lg font-semibold">{b?.name}</div>
-                    <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
-                  </div>
-                </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-lg font-semibold">{b?.name}</div>
+                <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {/* Webcam as a tile (if present) */}
                 {settings?.show_webcam && b?.webcam && (
-                  <div className="rounded-2xl border border-border bg-card p-3">
-                    <div className="mb-2 text-sm font-medium">Webcam</div>
+                  <div className={`rounded-xl border border-border bg-card ${cardPad}`}>
+                    <div className="mb-1 text-sm font-medium">Webcam</div>
                     <VideoTile src={b.webcam!} />
                   </div>
                 )}
-              </div>
 
-              {/* Right: big tiles */}
-              <div className="grid gap-3 md:grid-cols-2 lg:col-span-2">
                 {list.map((t) => {
                   const meta = params[`${t.buoy_id},${t.parameter_id}`];
                   const unit = meta?.unit ?? "";
@@ -717,10 +828,11 @@ export default function Monitor() {
                   const thr = t.thresholds_id ? thresholds[t.thresholds_id] : undefined;
                   const color = classify(last?.value, thr);
                   const series = settings?.show_sparklines ? sparks[t.id] ?? [] : [];
+
                   return (
                     <div
                       key={t.id}
-                      className={`rounded-2xl border p-4 text-lg ${statusClasses(color)}`}
+                      className={`rounded-xl border ${cardPad} text-lg shadow-soft ${statusClasses(color)}`}
                     >
                       <div className="font-medium truncate">{name}</div>
                       <div className="mt-2 text-4xl font-semibold">

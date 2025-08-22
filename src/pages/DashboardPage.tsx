@@ -5,6 +5,7 @@ import { useSession } from "@/hooks/useSession";
 import BuoyStats from "@/components/Buoy/BuoyStats";
 import { Link, useNavigate } from "react-router-dom";
 import { useUnitPreferences } from "@/contexts/UnitPreferencesContext";
+import AlertsPanel from "@/components/Alerts/AlertsPanel";
 
 /** Types aligned to your schema */
 type Buoy = {
@@ -30,7 +31,7 @@ export default function DashboardPage() {
   const nav = useNavigate();
   const { session } = useSession();
   const { currentTeam, currentTeamId, isManager, loading: teamLoading } = useTeam();
-
+  const [activeTab, setActiveTab] = useState<"buoys" | "alerts">("buoys");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [teamBuoys, setTeamBuoys] = useState<Buoy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,25 +123,21 @@ export default function DashboardPage() {
 
   return (
     <section className="mx-auto max-w-7xl px-3 py-4 space-y-6">
-      {/* Top banner with team logo + greeting */}
+      {/* Header as-is */}
       <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-[#0b1a2b] dark:to-[#132c47] p-4">
-        {/* top-right sign out (above greeting) */}
-
         <div className="flex items-center gap-4">
-          {/* Team logo */}
+          {/* Team logo block unchanged */}
           {currentTeam?.logo_url ? (
-            <img
-              src={currentTeam.logo_url}
-              alt={`${currentTeam.name} logo`}
-              className="h-14 w-14 rounded-xl border border-border object-cover bg-white"
-            />
+            <img src={currentTeam.logo_url} alt={`${currentTeam.name} logo`} className="h-14 w-14 rounded-xl border border-border object-cover bg-white" />
           ) : (
             <div className="h-14 w-14 rounded-xl border border-border bg-card grid place-items-center text-sm">
               {currentTeam?.name?.slice(0, 2).toUpperCase() ?? "TM"}
             </div>
           )}
           <div className="min-w-0">
-            <div className="text-2xl font-semibold truncate">{greeting}</div>
+            <div className="text-2xl font-semibold truncate">
+              {greeting}
+            </div>
             <div className="text-sm text-muted truncate">
               {currentTeam?.name ? `Team: ${currentTeam.name}` : "Loading team…"}
             </div>
@@ -148,214 +145,227 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick links to team buoys */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Your buoys</h2>
-          <Link
-            to="/"
-            className="text-sm text-white bg-primary rounded-lg border border-border bg-card px-3 py-1.5 hover:bg-accent/30"
-            title="Open map"
+      {/* Tabs */}
+      <div className="rounded-xl border border-border bg-card p-2">
+        <div className="flex gap-2">
+          <button
+            className={`h-9 rounded-lg px-3 text-sm border ${activeTab === "buoys" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"}`}
+            onClick={() => setActiveTab("buoys")}
           >
-            Open map
-          </Link>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-28 animate-pulse rounded-xl border border-border bg-card"
-              />
-            ))
-          ) : teamBuoys.length === 0 ? (
-            <div className="text-sm text-muted">No buoys linked to this team yet.</div>
-          ) : (
-            teamBuoys.map((b) => (
-              <div
-                key={b.buoy_id}
-                className="rounded-xl border border-border bg-card p-3 shadow-soft"
-              >
-                <div className="text-sm font-medium truncate">{b.name}</div>
-                <div className="mt-0.5 text-xs text-muted truncate">
-                  {b.location_nickname ?? `${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}`}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    to={`/trends?buoy=${b.buoy_id}`}
-                    className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30"
-                  >
-                    Trends
-                  </Link>
-                  <button
-                    className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30"
-                    onClick={() => setSelected(b)}
-                    aria-label={`Open realtime data for ${b.name}`}
-                  >
-                    Realtime Data
-                  </button>
-                  {b.webcam && (
-                    <a
-                      href={b.webcam}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-lg border border-border bg-primary px-2.5 text-white py-1 text-xs hover:bg-accent/30"
-                    >
-                      Webcam
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
+            Buoys
+          </button>
+          <button
+            className={`h-9 rounded-lg px-3 text-sm border ${activeTab === "alerts" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"}`}
+            onClick={() => setActiveTab("alerts")}
+          >
+            Alerts
+          </button>
         </div>
       </div>
 
-      {/* Manager tools */}
-      {isManager && (
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Manager tools</h2>
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Invite a teammate (email)</span>
-              <input
-                type="email"
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
-                placeholder="jane.doe@example.com"
-                value={invEmail}
-                onChange={(e) => setInvEmail(e.target.value)}
-              />
-            </label>
-            <button
-              className="h-10 self-end rounded-lg border border-border bg-primary px-4 text-sm text-white"
-              onClick={sendInvitation}
-              disabled={!invEmail || !currentTeamId}
-            >
-              Send invite
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-muted">
-            Invited users will receive a sign-up link and join <strong>{currentTeam?.name}</strong> automatically.
-          </p>
-        </div>
-      )}
-
-      <div className=" flex justify-end">
-        <button
-          onClick={signOut}
-          className="text-white h-9 rounded-lg border border-border bg-card px-3 text-sm bg-primary hover:bg-accent/30"
-          title="Sign out"
-        >
-          Sign out
-        </button>
-      </div>
-
-      {/* Fullscreen overlay for selected buoy */}
-      {selected && (
-        <div
-          className="fixed inset-0 z-[1100] bg-gradient-to-br from-[#0b1a2b] to-[#132c47] text-white"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="absolute right-4 top-3">
-            <button
-              onClick={() => setSelected(null)}
-              className="rounded-md border border-white/50 px-3 py-1 text-sm hover:bg-white/10"
-              aria-label="Back"
-            >
-              ← Back
-            </button>
-          </div>
-
-          <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 p-4 pt-14">
-            <div className="text-center">
-              <h2 className="text-xl font-semibold">{selected.name}</h2>
-              <div className="mt-1 text-sm text-white/80">
-                <b>Lat:</b> {selected.latitude}, <b>Lon:</b> {selected.longitude}
-              </div>
-              {selected.location_nickname && (
-                <div className="mt-1 text-sm text-white/80">{selected.location_nickname}</div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-white/80">
-              <Link
-                to={`/trends?buoy=${selected.buoy_id}`}
-                className="rounded-xl border border-white/30 px-3 py-1 text-white hover:bg-white/10"
-              >
-                Open Trends →
+      {/* Tab panels */}
+      {activeTab === "buoys" ? (
+        <>
+          {/* === Your existing Buoys section START === */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Your buoys</h2>
+              <Link to="/" className="text-sm text-white bg-primary rounded-lg border border-border bg-card px-3 py-1.5 hover:bg-accent/30" title="Open map">
+                Open map
               </Link>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+                ))
+              ) : teamBuoys.length === 0 ? (
+                <div className="text-sm text-muted">No buoys linked to this team yet.</div>
+              ) : (
+                teamBuoys.map((b) => (
+                  <div key={b.buoy_id} className="rounded-xl border border-border bg-card p-3 shadow-soft">
+                    <div className="text-sm font-medium truncate">{b.name}</div>
+                    <div className="mt-0.5 text-xs text-muted truncate">
+                      {b.location_nickname ?? `${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}`}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link to={`/trends?buoy=${b.buoy_id}`} className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30">
+                        Trends
+                      </Link>
+                      <button
+                        className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30"
+                        onClick={() => setSelected(b)}
+                        aria-label={`Open realtime data for ${b.name}`}
+                      >
+                        Realtime Data
+                      </button>
+                      {b.webcam && (
+                        <a href={b.webcam} target="_blank" rel="noreferrer" className="rounded-lg border border-border bg-primary px-2.5 text-white py-1 text-xs hover:bg-accent/30">
+                          Webcam
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
-            {/* Webcam, if present */}
-            {selected.webcam && (
-              <div className="mx-auto w-full max-w-4xl grow">
-                <video
-                  className="h-[60vh] w-full rounded-lg border border-white/30 object-cover"
-                  controls
-                  autoPlay
-                  muted
-                  playsInline
+          {/* Manager tools */}
+          {isManager && (
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">Manager tools</h2>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
+                <label className="grid gap-1">
+                  <span className="text-sm text-muted">Invite a teammate (email)</span>
+                  <input
+                    type="email"
+                    className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
+                    placeholder="jane.doe@example.com"
+                    value={invEmail}
+                    onChange={(e) => setInvEmail(e.target.value)}
+                  />
+                </label>
+                <button
+                  className="h-10 self-end rounded-lg border border-border bg-primary px-4 text-sm text-white"
+                  onClick={sendInvitation}
+                  disabled={!invEmail || !currentTeamId}
                 >
-                  <source src={selected.webcam} type="video/mp4" />
-                </video>
+                  Send invite
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Invited users will receive a sign-up link and join <strong>{currentTeam?.name}</strong> automatically.
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={signOut}
+              className="text-white h-9 rounded-lg border border-border bg-card px-3 text-sm bg-primary hover:bg-accent/30"
+              title="Sign out"
+            >
+              Sign out
+            </button>
+          </div>
+
+          {/* Fullscreen overlay for selected buoy */}
+          {selected && (
+            <div
+              className="fixed inset-0 z-[1100] bg-gradient-to-br from-[#0b1a2b] to-[#132c47] text-white"
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="absolute right-4 top-3">
+                <button
+                  onClick={() => setSelected(null)}
+                  className="rounded-md border border-white/50 px-3 py-1 text-sm hover:bg-white/10"
+                  aria-label="Back"
+                >
+                  ← Back
+                </button>
+              </div>
+
+              <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 p-4 pt-14">
+                <div className="text-center">
+                  <h2 className="text-xl font-semibold">{selected.name}</h2>
+                  <div className="mt-1 text-sm text-white/80">
+                    <b>Lat:</b> {selected.latitude}, <b>Lon:</b> {selected.longitude}
+                  </div>
+                  {selected.location_nickname && (
+                    <div className="mt-1 text-sm text-white/80">{selected.location_nickname}</div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-white/80">
+                  <Link
+                    to={`/trends?buoy=${selected.buoy_id}`}
+                    className="rounded-xl border border-white/30 px-3 py-1 text-white hover:bg-white/10"
+                  >
+                    Open Trends →
+                  </Link>
+                </div>
+
+                {/* Webcam, if present */}
+                {selected.webcam && (
+                  <div className="mx-auto w-full max-w-4xl grow">
+                    <video
+                      className="h-[60vh] w-full rounded-lg border border-white/30 object-cover"
+                      controls
+                      autoPlay
+                      muted
+                      playsInline
+                    >
+                      <source src={selected.webcam} type="video/mp4" />
+                    </video>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {selected && (
+            <BuoyStats
+              buoy={selected}
+              onClose={() => setSelected(null)}
+            />
+          )}
+
+          {/* Units floating button (bottom-right) */}
+          <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
+            <button
+              className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-primary shadow-soft"
+              onClick={() => setShowUnits((s) => !s)}
+              aria-expanded={showUnits}
+            >
+              ⚙️ Units
+            </button>
+
+            {showUnits && (
+              <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Unit Preferences</h3>
+                  <button
+                    className="text-sm text-muted hover:opacity-80"
+                    onClick={() => setShowUnits(false)}
+                    aria-label="Close unit panel"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(Object.keys(unitPreferences) as Array<keyof typeof unitPreferences>).map((key) => (
+                    <label key={key} className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
+                      <span className="capitalize">{key}</span>
+                      <select
+                        className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+                        value={unitPreferences[key]}
+                        onChange={(e) => updatePreference(key, e.target.value as any)}
+                      >
+                        {UNIT_OPTIONS[key].map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
-
-                  {/* Units floating button (bottom-right) */}
-      <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
-        <button
-          className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-primary shadow-soft"
-          onClick={() => setShowUnits((s) => !s)}
-          aria-expanded={showUnits}
-        >
-          ⚙️ Units
-        </button>
-
-        {showUnits && (
-          <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Unit Preferences</h3>
-              <button
-                className="text-sm text-muted hover:opacity-80"
-                onClick={() => setShowUnits(false)}
-                aria-label="Close unit panel"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="space-y-2">
-              {(Object.keys(unitPreferences) as Array<keyof typeof unitPreferences>).map((key) => (
-                <label key={key} className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
-                  <span className="capitalize">{key}</span>
-                  <select
-                    className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
-                    value={unitPreferences[key]}
-                    onChange={(e) => updatePreference(key, e.target.value as any)}
-                  >
-                    {UNIT_OPTIONS[key].map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ))}
-            </div>
           </div>
-        )}
-      </div>
-
-            {selected && (
-              <BuoyStats
-                buoy={selected}
-                onClose={() => setSelected(null)}
-              />
-            )}
-          </div>
+        </>
+      ) : (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">Alerts</h2>
+          {currentTeamId ? (
+            <AlertsPanel teamId={currentTeamId} />
+          ) : (
+            <div className="text-sm text-muted">Select a team to view alerts.</div>
+          )}
         </div>
       )}
     </section>
