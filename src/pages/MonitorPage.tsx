@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useTeam } from "@/contexts/TeamContext";
 
 /* ---------- types aligned to your schema ---------- */
+type BuoyStatus = "active" | "inactive" | "retrieved";
 type Buoy = {
   buoy_id: number;
   name: string;
@@ -11,6 +12,7 @@ type Buoy = {
   webcam: string | null;
   latitude?: number;
   longitude?: number;
+  status?: BuoyStatus | null; // NEW
 };
 
 type Tile = {
@@ -46,8 +48,8 @@ type Spark = { t: number; v: number | null };
 type Settings = {
   team_id: string;
   layout_mode: "grid" | "spotlight";
-  cycle_seconds: number;
-  dwell_on_alert_seconds: number;
+  cycle_seconds: number;              // still stored, but Spotlight now uses fixed 30s as requested
+  dwell_on_alert_seconds: number;     // ignored for Spotlight
   show_sparklines: boolean;
   show_webcam: boolean;
   tile_density: "comfortable" | "compact";
@@ -96,9 +98,9 @@ const KIND_LABEL: Record<string, string> = {
 
 function chipColor(sev: string) {
   switch (sev) {
-    case "critical": return "bg-red-500/4 text-red-500 border-red-500/30";
-    case "warning":  return "bg-amber-500/4 text-amber-500 border-amber-500/30";
-    default:         return "bg-sky-500/4 text-sky-400 border-sky-500/30";
+    case "critical": return "bg-red-500/15 text-red-500 border-red-500/30";
+    case "warning":  return "bg-amber-500/15 text-amber-500 border-amber-500/30";
+    default:         return "bg-sky-500/15 text-sky-400 border-sky-500/30";
   }
 }
 
@@ -261,7 +263,7 @@ export default function Monitor() {
   const [loading, setLoading] = useState(true);
 
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
-  const [cycleIndex, setCycleIndex] = useState(0);
+  const [cycleIndex, setCycleIndex] = useState(0); // index into spotList
   const [paused, setPaused] = useState(false);
 
   /* --- Live alert toasts --- */
@@ -277,10 +279,8 @@ export default function Monitor() {
   const recentIdsRef = useRef<Set<string>>(new Set());
 
   const pushToast = useCallback((row: AlertEvent) => {
-    // de-dupe by id
     if (recentIdsRef.current.has(row.id)) return;
     recentIdsRef.current.add(row.id);
-    // prune set size
     if (recentIdsRef.current.size > 200) {
       recentIdsRef.current = new Set(Array.from(recentIdsRef.current).slice(-100));
     }
@@ -300,10 +300,9 @@ export default function Monitor() {
         throttled: !!row.throttled,
       },
       ...prev,
-    ].slice(0, 5)); // cap to 5 visible
+    ].slice(0, 5));
   }, []);
 
-  // Subscribe to live alert events for this team
   useEffect(() => {
     if (!currentTeamId) return;
     const ch = supabase.channel("alert-events-monitor")
@@ -395,7 +394,7 @@ export default function Monitor() {
       const [{ data: bs }, { data: tsTeam }, { data: tsGlobal }] = await Promise.all([
         supabase
           .from("buoys")
-          .select("buoy_id,name,location_nickname,webcam,latitude,longitude")
+          .select("buoy_id,name,location_nickname,webcam,latitude,longitude,status") // include status
           .in("buoy_id", ids),
         supabase
           .from("monitor_tiles")
@@ -573,6 +572,22 @@ export default function Monitor() {
 
   const buoyIds = useMemo(() => buoys.map((b) => b.buoy_id), [buoys]);
 
+  const activeBuoyIds = useMemo(
+    () => buoys.filter((b) => b.status !== "inactive").map((b) => b.buoy_id),
+    [buoys]
+  );
+
+  // List to cycle in Spotlight: prefer active, else all
+  const spotList = useMemo(
+    () => (activeBuoyIds.length ? activeBuoyIds : buoyIds),
+    [activeBuoyIds, buoyIds]
+  );
+
+  // If spot list changes and cycleIndex is out-of-bounds, clamp to 0
+  useEffect(() => {
+    if (cycleIndex >= spotList.length) setCycleIndex(0);
+  }, [spotList.length, cycleIndex]);
+
   const criticalBuoys = useMemo(() => {
     const set = new Set<number>();
     for (const t of tiles) {
@@ -583,50 +598,21 @@ export default function Monitor() {
     return Array.from(set);
   }, [tiles, latest, thresholds]);
 
-  /* === Spotlight scheduler (fixed) === */
-  const timerRef = useRef<number | null>(null);
+  /* === Spotlight scheduler: fixed 30s rotation, skip inactive === */
+  const intervalRef = useRef<number | null>(null);
   useEffect(() => {
-    if (layout !== "spotlight" || buoyIds.length === 0 || paused) return;
-
-    const cycle = settings?.cycle_seconds ?? 15;
-
-    const critIdxs = criticalBuoys
-      .map((id) => buoyIds.indexOf(id))
-      .filter((i) => i >= 0);
-
-    const list = (critIdxs.length ? critIdxs : buoyIds.map((_, i) => i));
-
-    let pos = list.indexOf(cycleIndex);
-    if (pos < 0) pos = 0;
-
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
+    if (layout !== "spotlight" || paused || spotList.length === 0) {
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+      return;
     }
-
-    const tick = () => {
-      pos = (pos + 1) % list.length;
-      setCycleIndex(list[pos]);
-      timerRef.current = window.setTimeout(tick);
-    };
-
-    timerRef.current = window.setTimeout(tick);
-
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    intervalRef.current = window.setInterval(() => {
+      setCycleIndex((i) => (i + 1) % spotList.length);
+    }, 30_000); // fixed 30 seconds
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     };
-  }, [
-    layout,
-    paused,
-    buoyIds,
-    cycleIndex,
-    criticalBuoys,
-    settings?.cycle_seconds,
-    settings?.dwell_on_alert_seconds,
-  ]);
+  }, [layout, paused, spotList.length]);
 
   /* hotkeys + fullscreen */
   useEffect(() => {
@@ -690,7 +676,7 @@ export default function Monitor() {
   /* render */
   return (
     <section className="mx-auto max-w-[1400px] px-3 py-4 space-y-4">
-      {/* Live alert toasts (top-right) */}
+      {/* Live alert toasts (top-right, manual dismiss) */}
       <div
         className="pointer-events-none fixed right-3 top-3 z-[2000] flex w-[min(92vw,420px)] flex-col gap-2"
         role="status"
@@ -727,17 +713,28 @@ export default function Monitor() {
         <Controls />
       </div>
 
-      {/* locations row */}
+      {/* locations row (inactive chips in RED) */}
       <div className="overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-2">
-          {buoys.map((b) => (
-            <div
-              key={b.buoy_id}
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5"
-            >
-              <span className="text-sm">{b.location_nickname ?? b.name}</span>
-            </div>
-          ))}
+          {buoys.map((b) => {
+            const inactive = b.status === "inactive";
+            return (
+              <div
+                key={b.buoy_id}
+                className={
+                  "inline-flex items-center gap-2 rounded-full px-3 py-1.5 border " +
+                  (inactive
+                    ? "border-red-400 bg-red-50 text-red-700 dark:bg-red-950/30 dark:border-red-500"
+                    : "border-border bg-card")
+                }
+                title={inactive ? "Inactive buoy (excluded from Spotlight cycle)" : ""}
+              >
+                <span className={"text-sm " + (inactive ? "text-red-700" : "")}>
+                  {b.location_nickname ?? b.name}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -751,7 +748,7 @@ export default function Monitor() {
       ) : buoys.length === 0 ? (
         <div className="text-sm text-muted">No buoys configured for this team.</div>
       ) : layout === "grid" ? (
-        /* GRID: all buoys */
+        /* GRID */
         Object.entries(groupedByBuoy).map(([bStr, list]) => {
           const b = buoysById[Number(bStr)];
           return (
@@ -762,7 +759,7 @@ export default function Monitor() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {/* webcam small tile (optional) */}
+                {/* webcam tile */}
                 {settings?.show_webcam && b?.webcam && (
                   <div className={`rounded-xl border border-border bg-card ${cardPad}`}>
                     <div className="mb-1 text-sm font-medium">Webcam</div>
@@ -790,6 +787,11 @@ export default function Monitor() {
                         <span className="ml-1 text-sm text-muted">{unit}</span>
                       </div>
                       <div className="mt-1 text-xs text-muted">{timeAgo(last?.measured_at)}</div>
+                      {t.depth != null && (
+                        <div className="mt-0.5 text-[11px] text-muted">
+                          Depth: {Number(t.depth).toFixed(1)} m
+                        </div>
+                      )}
                       {series.length > 1 && <Sparkline points={series} />}
                     </div>
                   );
@@ -799,11 +801,14 @@ export default function Monitor() {
           );
         })
       ) : (
-        /* SPOTLIGHT: same grid style; webcam is just another tile */
+        /* SPOTLIGHT: same grid, cycling through spotList every 30s */
         (() => {
-          const bId = buoyIds[cycleIndex] ?? buoyIds[0];
-          const b = buoysById[bId];
-          const list = groupedByBuoy[bId] ?? [];
+          const bId = spotList[cycleIndex] ?? spotList[0];
+          const b = bId != null ? buoysById[bId] : undefined;
+          const list = bId != null ? (groupedByBuoy[bId] ?? []) : [];
+
+          if (!b) return null;
+
           return (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -812,7 +817,7 @@ export default function Monitor() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {/* Webcam as a tile (if present) */}
+                {/* webcam tile */}
                 {settings?.show_webcam && b?.webcam && (
                   <div className={`rounded-xl border border-border bg-card ${cardPad}`}>
                     <div className="mb-1 text-sm font-medium">Webcam</div>

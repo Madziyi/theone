@@ -314,49 +314,6 @@ export default function DashboardPage() {
             />
           )}
 
-          {/* Units floating button (bottom-right) */}
-          <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
-            <button
-              className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-primary shadow-soft"
-              onClick={() => setShowUnits((s) => !s)}
-              aria-expanded={showUnits}
-            >
-              ⚙️ Units
-            </button>
-
-            {showUnits && (
-              <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Unit Preferences</h3>
-                  <button
-                    className="text-sm text-muted hover:opacity-80"
-                    onClick={() => setShowUnits(false)}
-                    aria-label="Close unit panel"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {(Object.keys(unitPreferences) as Array<keyof typeof unitPreferences>).map((key) => (
-                    <label key={key} className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
-                      <span className="capitalize">{key}</span>
-                      <select
-                        className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
-                        value={unitPreferences[key]}
-                        onChange={(e) => updatePreference(key, e.target.value as any)}
-                      >
-                        {UNIT_OPTIONS[key].map((u) => (
-                          <option key={u} value={u}>
-                            {u}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
         </>
       ) : (
         <div className="space-y-3">

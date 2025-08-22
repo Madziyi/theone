@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
-import type { ReactNode } from "react";
 import { useUnitPreferences } from "@/contexts/UnitPreferencesContext";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import {
   Thermometer,
   Gauge,
@@ -22,6 +22,7 @@ type Buoy = {
   name: string;
   latitude: number;
   longitude: number;
+  webcam?: string | null; // <-- allow webcam button
 };
 
 type LatestRow = {
@@ -34,7 +35,6 @@ type LatestRow = {
 };
 
 /* -------------------- Unit conversions (yours, verbatim logic) -------------------- */
-
 type UnitFn = (v: number) => number;
 type UnitConversions = {
   temperature: Record<string, Record<string, UnitFn>>;
@@ -71,6 +71,13 @@ const UNIT_CONVERSIONS: UnitConversions = {
 };
 
 type UnitPreferences = ReturnType<typeof useUnitPreferences>["unitPreferences"];
+const UNIT_OPTIONS: Record<keyof UnitPreferences, string[]> = {
+  temperature: ["°C", "K", "°F"],
+  pressure: ["Pa", "Psi", "kPa"],
+  speed: ["m/s", "cm/s", "knots", "mph"],
+  distance: ["m", "ft"],
+  concentration: ["g/L", "μg/L"],
+};
 
 const convertUnit = (
   value: number,
@@ -95,13 +102,12 @@ const getConversionCategory = (name: string): keyof UnitConversions | null => {
 };
 
 /* -------------------- Icons by category (lucide) -------------------- */
-
 const ICONS = {
   temperature: Thermometer,
   pressure: Gauge,
   wave: Waves,
-  speed: GaugeCircle,       // for derived speed
-  direction: Compass,       // for derived direction
+  speed: GaugeCircle,
+  direction: Compass,
   distance: Ruler,
   concentration: FlaskConical,
   wind: Wind,
@@ -129,7 +135,6 @@ const getIconCategory = (name: string): IconKey | null => {
 };
 
 /* -------------------- Data hooks & helpers -------------------- */
-
 function useLatestForBuoy(buoyKey: number | string | null) {
   const [rows, setRows] = useState<LatestRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -140,7 +145,6 @@ function useLatestForBuoy(buoyKey: number | string | null) {
     (async () => {
       setLoading(true);
       try {
-        // Use buoy_id (string/number) for RPC
         const { data, error } = await supabase.rpc("get_latest_measurements", { p_buoy_id: buoyKey } as any);
         if (error) throw error;
         if (!cancelled) {
@@ -154,7 +158,6 @@ function useLatestForBuoy(buoyKey: number | string | null) {
           })));
         }
       } catch {
-        // Fallback: read table by buoy_id
         const { data } = await supabase
           .from("measurements")
           .select("parameter_id, value, unit, measured_at:timestamp, depth:depth, buoy_id")
@@ -198,10 +201,8 @@ function groupByDepth(rows: LatestRow[]) {
   return by;
 }
 
-// Hide eastward/northward water velocities anywhere they appear
 const isENVelocity = (name: string | null) =>
   !!name && /(eastward|northward)\s+(water\s+)?velocity/i.test(name);
- 
 
 function depthLabel(depth: number | null, preferred: "m" | "ft") {
   const d = depth ?? 0;
@@ -222,10 +223,11 @@ function timeAgo(iso: string) {
 }
 
 /* -------------------- Component -------------------- */
-
 export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () => void }) {
   const { rows, loading } = useLatestForBuoy(buoy?.buoy_id ?? null);
-  const { unitPreferences } = useUnitPreferences();
+  const { unitPreferences, updatePreference } = useUnitPreferences();
+  const [showUnits, setShowUnits] = useState(false);
+
   const visible = useMemo(() => rows.filter((r) => !isENVelocity(r.standard_name)), [rows]);
   const byDepth = useMemo(() => groupByDepth(visible), [visible]);
 
@@ -240,10 +242,26 @@ export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () =
       aria-modal="true"
       aria-label={`Realtime data for ${buoy.name}`}
     >
-      {/* Top bar */}
-      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-border/60 bg-white/80 backdrop-blur dark:bg-black/20">
-        <div className="text-sm text-muted">{buoy.latitude.toFixed(4)}, {buoy.longitude.toFixed(4)}</div>
-        <Button variant="outline" size="sm" onClick={onClose} aria-label="Close stats">Close</Button>
+      {/* Top bar with coords + actions + close */}
+      <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-border/60 bg-white/80 backdrop-blur dark:bg-black/20">
+        <div className="text-sm text-muted">
+          {buoy.latitude.toFixed(4)}, {buoy.longitude.toFixed(4)}
+        </div>
+
+        <div className="ml-3 flex items-center gap-2">
+          <Button variant="outline" size="sm">
+            <Link to={`/trends?buoy=${buoy.buoy_id}`}>View Trends</Link>
+          </Button>
+          {buoy.webcam ? (
+            <Button variant="outline" size="sm">
+              <a href={buoy.webcam} target="_blank" rel="noreferrer">Open Webcam</a>
+            </Button>
+          ) : null}
+        </div>
+
+        <Button className="ml-auto" variant="outline" size="sm" onClick={onClose} aria-label="Close stats">
+          Close
+        </Button>
       </div>
 
       <div className="mx-auto max-w-6xl p-4 space-y-8">
@@ -272,7 +290,7 @@ export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () =
                 <div className="h-px flex-1 bg-black/10 dark:bg-white/20" />
               </div>
 
-              {/* Responsive cards: 2 cols mobile, scale up on larger screens */}
+              {/* Responsive cards */}
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
                 {items.map((r) => (
                   <MetricCard key={`${r.parameter_id}-${r.depth ?? 0}`} row={r} prefs={unitPreferences} />
@@ -281,19 +299,61 @@ export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () =
             </section>
           ))}
       </div>
+
+      {/* Units floating button (bottom-right) – inside overlay */}
+      <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
+        <button
+          className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-primary shadow-soft"
+          onClick={() => setShowUnits((s) => !s)}
+          aria-expanded={showUnits}
+        >
+          ⚙️ Units
+        </button>
+
+        {showUnits && (
+          <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Unit Preferences</h3>
+              <button
+                className="text-sm text-muted hover:opacity-80"
+                onClick={() => setShowUnits(false)}
+                aria-label="Close unit panel"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(Object.keys(unitPreferences) as Array<keyof typeof unitPreferences>).map((key) => (
+                <label key={key} className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
+                  <span className="capitalize">{key}</span>
+                  <select
+                    className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+                    value={unitPreferences[key]}
+                    onChange={(e) => updatePreference(key, e.target.value as any)}
+                  >
+                    {UNIT_OPTIONS[key].map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 /* -------------------- Presentational parts -------------------- */
-
 function MetricCard({ row, prefs }: { row: LatestRow; prefs: UnitPreferences }) {
   const name = row.standard_name ?? `Parameter ${row.parameter_id}`;
   const iconKey = getIconCategory(name) ?? "gauge";
-  // Fallback icon if key not found
   const Icon = (ICONS as any)[iconKey] ?? Gauge;
 
-  // Direction special case
   const isDirection = (row.standard_name ?? "").toLowerCase().includes("direction");
   let valueEl: ReactNode;
 
@@ -311,7 +371,6 @@ function MetricCard({ row, prefs }: { row: LatestRow; prefs: UnitPreferences }) 
 
     if (val != null && category) {
       val = convertUnit(val, row.unit, category, prefs);
-      // Preferred unit label from preferences
       outUnit = String(prefs[category] ?? row.unit);
     }
 
