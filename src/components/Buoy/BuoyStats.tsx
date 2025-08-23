@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { useUnitPreferences } from "@/contexts/UnitPreferencesContext";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
   Droplet,
   GaugeCircle,
   Clock,
+  X as CloseIcon,
 } from "lucide-react";
 
 type Buoy = {
@@ -22,7 +23,7 @@ type Buoy = {
   name: string;
   latitude: number;
   longitude: number;
-  webcam?: string | null; // <-- allow webcam button
+  webcam?: string | null;
 };
 
 type LatestRow = {
@@ -34,7 +35,7 @@ type LatestRow = {
   measured_at: string;
 };
 
-/* -------------------- Unit conversions (yours, verbatim logic) -------------------- */
+/* -------------------- Unit conversions (unchanged) -------------------- */
 type UnitFn = (v: number) => number;
 type UnitConversions = {
   temperature: Record<string, Record<string, UnitFn>>;
@@ -101,7 +102,7 @@ const getConversionCategory = (name: string): keyof UnitConversions | null => {
   return null;
 };
 
-/* -------------------- Icons by category (lucide) -------------------- */
+/* -------------------- Icons -------------------- */
 const ICONS = {
   temperature: Thermometer,
   pressure: Gauge,
@@ -222,11 +223,78 @@ function timeAgo(iso: string) {
   return `Updated about ${d} day${d === 1 ? "" : "s"} ago`;
 }
 
+/* -------------------- Webcam modal -------------------- */
+function WebcamModal({ src, onClose }: { src: string; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isHls = /\.m3u8($|\?)/i.test(src);
+
+  useEffect(() => {
+    let hls: any;
+    const video = videoRef.current;
+    if (!video) return;
+
+    // native HLS support
+    if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.play().catch(() => {});
+      return;
+    }
+
+    // hls.js for other browsers
+    (async () => {
+      if (isHls) {
+        const Hls = (await import("hls.js")).default;
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(src);
+          hls.attachMedia(video);
+        } else {
+          video.src = src; // fallback
+        }
+      } else {
+        video.src = src; // mp4/etc.
+      }
+    })();
+
+    return () => {
+      try { hls?.destroy?.(); } catch {}
+    };
+  }, [src, isHls]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Webcam video"
+    >
+      <div className="relative w-full max-w-4xl">
+        <button
+          className="absolute -top-10 right-0 rounded-lg border border-white/40 bg-black/40 px-3 py-1 text-sm text-white hover:bg-white/10"
+          onClick={onClose}
+          aria-label="Close webcam"
+        >
+          <CloseIcon className="inline h-4 w-4 mr-1" /> Close
+        </button>
+        <video
+          ref={videoRef}
+          className="w-full max-h-[80vh] rounded-xl border border-white/30 bg-black object-contain"
+          controls
+          autoPlay
+          muted
+          playsInline
+        />
+      </div>
+    </div>
+  );
+}
+
 /* -------------------- Component -------------------- */
 export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () => void }) {
   const { rows, loading } = useLatestForBuoy(buoy?.buoy_id ?? null);
   const { unitPreferences, updatePreference } = useUnitPreferences();
   const [showUnits, setShowUnits] = useState(false);
+  const [showWebcam, setShowWebcam] = useState(false);
 
   const visible = useMemo(() => rows.filter((r) => !isENVelocity(r.standard_name)), [rows]);
   const byDepth = useMemo(() => groupByDepth(visible), [visible]);
@@ -253,8 +321,8 @@ export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () =
             <Link to={`/trends?buoy=${buoy.buoy_id}`}>View Trends</Link>
           </Button>
           {buoy.webcam ? (
-            <Button variant="outline" size="sm">
-              <a href={buoy.webcam} target="_blank" rel="noreferrer">Open Webcam</a>
+            <Button variant="outline" size="sm" onClick={() => setShowWebcam(true)}>
+              Open Webcam
             </Button>
           ) : null}
         </div>
@@ -344,6 +412,11 @@ export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () =
           </div>
         )}
       </div>
+
+      {/* Webcam modal (onscreen popup) */}
+      {showWebcam && buoy.webcam && (
+        <WebcamModal src={buoy.webcam} onClose={() => setShowWebcam(false)} />
+      )}
     </div>
   );
 }

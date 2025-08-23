@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useTeam } from "@/contexts/TeamContext";
 import { useSession } from "@/hooks/useSession";
 import BuoyStats from "@/components/Buoy/BuoyStats";
 import { Link, useNavigate } from "react-router-dom";
-import { useUnitPreferences } from "@/contexts/UnitPreferencesContext";
 import AlertsPanel from "@/components/Alerts/AlertsPanel";
+import {
+  X as CloseIcon,
+} from "lucide-react";
 
 /** Types aligned to your schema */
 type Buoy = {
@@ -19,13 +21,71 @@ type Buoy = {
 };
 type Profile = { first_name: string; last_name: string; email: string };
 
-const UNIT_OPTIONS: Record<keyof ReturnType<typeof useUnitPreferences>["unitPreferences"], string[]> = {
-  temperature: ["°C", "K", "°F"],
-  pressure: ["Pa", "Psi", "kPa"],
-  speed: ["m/s", "cm/s", "knots", "mph"],
-  distance: ["m", "ft"],
-  concentration: ["g/L", "μg/L"],
-};
+/* -------------------- Webcam modal -------------------- */
+function WebcamModal({ src, onClose }: { src: string; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isHls = /\.m3u8($|\?)/i.test(src);
+
+  useEffect(() => {
+    let hls: any;
+    const video = videoRef.current;
+    if (!video) return;
+
+    // native HLS support
+    if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.play().catch(() => {});
+      return;
+    }
+
+    // hls.js for other browsers
+    (async () => {
+      if (isHls) {
+        const Hls = (await import("hls.js")).default;
+        if (Hls.isSupported()) {
+          hls = new Hls();
+          hls.loadSource(src);
+          hls.attachMedia(video);
+        } else {
+          video.src = src; // fallback
+        }
+      } else {
+        video.src = src; // mp4/etc.
+      }
+    })();
+
+    return () => {
+      try { hls?.destroy?.(); } catch {}
+    };
+  }, [src, isHls]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1400] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Webcam video"
+    >
+      <div className="relative w-full max-w-4xl">
+        <button
+          className="absolute -top-10 right-0 rounded-lg border border-white/40 bg-black/40 px-3 py-1 text-sm text-white hover:bg-white/10"
+          onClick={onClose}
+          aria-label="Close webcam"
+        >
+          <CloseIcon className="inline h-4 w-4 mr-1" /> Close
+        </button>
+        <video
+          ref={videoRef}
+          className="w-full max-h-[80vh] rounded-xl border border-white/30 bg-black object-contain"
+          controls
+          autoPlay
+          muted
+          playsInline
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const nav = useNavigate();
@@ -37,8 +97,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [invEmail, setInvEmail] = useState("");
   const [selected, setSelected] = useState<Buoy | null>(null);
-  const [showUnits, setShowUnits] = useState(false);
-  const { unitPreferences, updatePreference } = useUnitPreferences();
+  const [showWebcam, setShowWebcam] = useState(false);
 
   // Load profile (for greeting)
   useEffect(() => {
@@ -199,10 +258,16 @@ export default function DashboardPage() {
                       >
                         Realtime Data
                       </button>
-                      {b.webcam && (
-                        <a href={b.webcam} target="_blank" rel="noreferrer" className="rounded-lg border border-border bg-primary px-2.5 text-white py-1 text-xs hover:bg-accent/30">
-                          Webcam
-                        </a>
+                         {b.webcam ? (
+                      <button className="rounded-lg border border-border bg-primary px-2.5 text-white py-1 text-xs hover:bg-accent/30"
+                        onClick={() => setShowWebcam(true)}>
+                        Open Webcam
+                      </button>
+                    ) : null}
+
+                      {/* Webcam modal (onscreen popup) */}
+                      {showWebcam && b.webcam && (
+                        <WebcamModal src={b.webcam} onClose={() => setShowWebcam(false)} />
                       )}
                     </div>
                   </div>
@@ -210,6 +275,8 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+
+          
 
           {/* Manager tools */}
           {isManager && (

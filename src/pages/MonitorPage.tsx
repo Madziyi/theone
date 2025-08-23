@@ -1,6 +1,7 @@
 // src/pages/Monitor.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useUnitPreferences } from "@/contexts/UnitPreferencesContext";
 import { useTeam } from "@/contexts/TeamContext";
 
 /* ---------- types aligned to your schema ---------- */
@@ -103,6 +104,74 @@ function chipColor(sev: string) {
     default:         return "bg-sky-500/15 text-sky-400 border-sky-500/30";
   }
 }
+
+/* -------------------- Unit conversions (unchanged) -------------------- */
+type UnitFn = (v: number) => number;
+type UnitConversions = {
+  temperature: Record<string, Record<string, UnitFn>>;
+  pressure: Record<string, Record<string, UnitFn>>;
+  speed: Record<string, Record<string, UnitFn>>;
+  distance: Record<string, Record<string, UnitFn>>;
+  concentration: Record<string, Record<string, UnitFn>>;
+};
+
+const UNIT_CONVERSIONS: UnitConversions = {
+  temperature: {
+    K: { "°C": (k) => k - 273.15, "°F": (k) => (k - 273.15) * 9 / 5 + 32 },
+    "°C": { K: (c) => c + 273.15, "°F": (c) => (c * 9 / 5) + 32 },
+    "°F": { K: (f) => (f - 32) * 5 / 9 + 273.15, "°C": (f) => (f - 32) * 5 / 9 },
+  },
+  pressure: {
+    Pa: { Psi: (pa) => pa * 0.000145038, kPa: (pa) => pa / 1000 },
+    Psi: { Pa: (psi) => psi / 0.000145038, kPa: (psi) => psi * 6.89476 },
+    kPa: { Pa: (kpa) => kpa * 1000, Psi: (kpa) => kpa * 0.145038 },
+  },
+  speed: {
+   "m/s":  { knots: (ms) => ms * 1.94384, mph: (ms) => ms * 2.23694, "cm/s": (ms) => ms * 100 },
+   knots:  { "m/s": (k) => k / 1.94384,  mph: (k) => k * 1.15078,     "cm/s": (k) => (k / 1.94384) * 100 },
+   mph:    { "m/s": (m) => m / 2.23694,  knots: (m) => m / 1.15078,   "cm/s": (m) => (m / 2.23694) * 100 },
+   "cm/s": { "m/s": (c) => c / 100,      knots: (c) => (c / 100) * 1.94384, mph: (c) => (c / 100) * 2.23694 },
+  },
+  distance: {
+    m: { ft: (m) => m * 3.28084 },
+    ft: { m: (f) => f / 3.28084 },
+  },
+  concentration: {
+    "g/L": { "μg/L": (g) => g * 1_000_000 },
+  },
+};
+
+type UnitPreferences = ReturnType<typeof useUnitPreferences>["unitPreferences"];
+const UNIT_OPTIONS: Record<keyof UnitPreferences, string[]> = {
+  temperature: ["°C", "K", "°F"],
+  pressure: ["Pa", "Psi", "kPa"],
+  speed: ["m/s", "cm/s", "knots", "mph"],
+  distance: ["m", "ft"],
+  concentration: ["g/L", "μg/L"],
+};
+
+const convertUnit = (
+  value: number,
+  fromUnit: string,
+  category: keyof UnitConversions,
+  unitPreferences: UnitPreferences
+): number => {
+  const preferredUnit = unitPreferences[category] as string;
+  if (fromUnit === preferredUnit) return value;
+  const conversions = UNIT_CONVERSIONS[category];
+  return conversions?.[fromUnit]?.[preferredUnit]?.(value) ?? value;
+};
+
+const getConversionCategory = (name: string): keyof UnitConversions | null => {
+  const lower = name.toLowerCase();
+  if (lower.includes("temperature")) return "temperature";
+  if (lower.includes("pressure")) return "pressure";
+  if (lower.includes("velocity") || lower.includes("speed")) return "speed";
+  if (lower.includes("height")) return "distance";
+  if (lower.includes("chlorophyll") || lower.includes("phycocyanin")) return "concentration";
+  return null;
+};
+
 
 /* ---------- utils ---------- */
 function timeAgo(iso?: string | null) {
@@ -261,6 +330,9 @@ export default function Monitor() {
   const [latest, setLatest] = useState<Record<number, LatestPoint>>({});
   const [sparks, setSparks] = useState<Record<number, Spark[]>>({});
   const [loading, setLoading] = useState(true);
+
+  const { unitPreferences, updatePreference } = useUnitPreferences();
+  const [showUnits, setShowUnits] = useState(false);
 
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
   const [cycleIndex, setCycleIndex] = useState(0); // index into spotList
@@ -478,42 +550,66 @@ export default function Monitor() {
     return () => { cancelled = true; };
   }, [tiles]);
 
-  /* latest values: refresh ~30s */
-  useEffect(() => {
-    let cancelled = false;
-    async function loadLatest() {
-      const out: Record<number, LatestPoint> = {};
-      const byBuoy: Record<number, Tile[]> = {};
-      for (const t of tiles) (byBuoy[t.buoy_id] ??= []).push(t);
+/* latest values via RPC: refresh ~30s */
+useEffect(() => {
+  let cancelled = false;
 
-      for (const [bStr, ts] of Object.entries(byBuoy)) {
-        const b = Number(bStr);
-        for (const t of ts) {
-          const { data } = await supabase
-            .from("measurements")
-            .select("value, timestamp")
-            .eq("buoy_id", b)
-            .eq("parameter_id", t.parameter_id)
-            .order("timestamp", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+  async function loadLatest() {
+    // how far back we allow "latest" to be considered (tweak as you like)
+    const CUTOFF_HOURS = 24; // e.g. show only points within the last 24h
+    const cutoffISO = new Date(Date.now() - CUTOFF_HOURS * 60 * 60 * 1000).toISOString();
 
-          out[t.id] = {
-            value: (data as any)?.value ?? null,
-            measured_at: (data as any)?.timestamp ?? null,
-          };
-        }
+    // pre-fill with nulls so tiles always render deterministically
+    const out: Record<number, LatestPoint> = {};
+    const byBuoy: Record<number, Tile[]> = {};
+    for (const t of tiles) {
+      (byBuoy[t.buoy_id] ??= []).push(t);
+      out[t.id] = { value: null, measured_at: null };
+    }
+
+    // fetch per-buoy using the RPC (distinct latest per parameter)
+    for (const [bStr, ts] of Object.entries(byBuoy)) {
+      const b = Number(bStr);
+      const { data, error } = await supabase.rpc("get_latest_measurements", {
+        p_buoy_id: b,
+        p_cutoff: cutoffISO,
+      });
+
+      if (error) {
+        console.warn("[monitor] get_latest_measurements error", { buoy: b, error: error.message });
+        continue;
       }
-      if (!cancelled) setLatest(out);
+
+      // map param -> latest
+      const latestByParam = new Map<number, { value: number | null; measured_at: string | null }>();
+      for (const r of (data as any[]) ?? []) {
+        latestByParam.set(Number(r.parameter_id), {
+          value: r.value ?? null,
+          measured_at: r.measured_at ?? null,
+        });
+      }
+
+      // fill the tile outputs for this buoy
+      for (const t of ts) {
+        const hit = latestByParam.get(t.parameter_id);
+        if (hit) out[t.id] = hit;
+      }
     }
-    if (tiles.length) {
-      loadLatest();
-      const id = setInterval(loadLatest, 30_000);
-      return () => { cancelled = true; clearInterval(id); };
-    } else {
-      setLatest({});
-    }
-  }, [tiles]);
+
+    if (!cancelled) setLatest(out);
+  }
+
+  if (tiles.length) {
+    loadLatest();
+    const id = setInterval(loadLatest, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  } else {
+    setLatest({});
+  }
+}, [tiles]);
 
   /* sparklines last 24h: refresh ~5m */
   useEffect(() => {
@@ -815,6 +911,50 @@ export default function Monitor() {
                 <div className="text-lg font-semibold">{b?.name}</div>
                 <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
               </div>
+
+{/* Units floating button (bottom-right) */}
+      <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
+        <button
+          className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-black shadow-soft"
+          onClick={() => setShowUnits((s) => !s)}
+          aria-expanded={showUnits}
+        >
+          ⚙️ Units
+        </button>
+
+        {showUnits && (
+          <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Unit Preferences</h3>
+              <button
+                className="text-sm text-muted hover:opacity-80"
+                onClick={() => setShowUnits(false)}
+                aria-label="Close unit panel"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2">
+              {(Object.keys(unitPreferences) as Array<keyof typeof unitPreferences>).map((key) => (
+                <label key={key} className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
+                  <span className="capitalize">{key}</span>
+                  <select
+                    className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+                    value={unitPreferences[key]}
+                    onChange={(e) => updatePreference(key, e.target.value as any)}
+                  >
+                    {UNIT_OPTIONS[key].map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {/* webcam tile */}
