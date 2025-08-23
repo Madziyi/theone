@@ -13,7 +13,7 @@ type Buoy = {
   webcam: string | null;
   latitude?: number;
   longitude?: number;
-  status?: BuoyStatus | null; // NEW
+  status?: BuoyStatus | null;
 };
 
 type Tile = {
@@ -32,7 +32,7 @@ type Threshold = {
   team_id: string | null;
   name: string;
   unit: string;
-  ranges: any; // {green:[min,max],yellow:[min,max],red:[min,max]} OR [{color,min,max}]
+  ranges: any;
 };
 
 type Param = {
@@ -49,8 +49,8 @@ type Spark = { t: number; v: number | null };
 type Settings = {
   team_id: string;
   layout_mode: "grid" | "spotlight";
-  cycle_seconds: number;              // still stored, but Spotlight now uses fixed 30s as requested
-  dwell_on_alert_seconds: number;     // ignored for Spotlight
+  cycle_seconds: number;
+  dwell_on_alert_seconds: number;
   show_sparklines: boolean;
   show_webcam: boolean;
   tile_density: "comfortable" | "compact";
@@ -77,13 +77,13 @@ type AlertEvent = {
   severity: AlertEventSeverity;
   buoy_id: number | null;
   parameter_id: number | null;
-  measured_at: string; // ISO
-  created_at: string;  // ISO
+  measured_at: string;
+  created_at: string;
   value: number | null;
   throttled: boolean;
   notified: boolean;
   message: string;
-  context: any; // { param_label, buoy_name, measured_at_fmt, ... }
+  context: any;
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -105,7 +105,7 @@ function chipColor(sev: string) {
   }
 }
 
-/* -------------------- Unit conversions (unchanged) -------------------- */
+/* -------------------- Unit conversions -------------------- */
 type UnitFn = (v: number) => number;
 type UnitConversions = {
   temperature: Record<string, Record<string, UnitFn>>;
@@ -172,6 +172,31 @@ const getConversionCategory = (name: string): keyof UnitConversions | null => {
   return null;
 };
 
+/* Small helpers for display conversion */
+function resolveDisplay(
+  rawValue: number | null | undefined,
+  meta: Param | undefined,
+  prefs: UnitPreferences
+): { value: number | null; unit: string } {
+  if (rawValue == null || !meta) return { value: null, unit: meta?.unit ?? "" };
+  const from = meta.unit ?? "";
+  const cat = getConversionCategory(meta.standard_name ?? "");
+  if (!cat || !from) return { value: rawValue, unit: from };
+  return {
+    value: convertUnit(rawValue, from, cat, prefs),
+    unit: String(prefs[cat] ?? from),
+  };
+}
+
+function convertSeriesToPrefs(series: Spark[], meta: Param | undefined, prefs: UnitPreferences): Spark[] {
+  if (!meta || !meta.unit) return series;
+  const cat = getConversionCategory(meta.standard_name ?? "");
+  if (!cat) return series;
+  return series.map((p) => ({
+    t: p.t,
+    v: p.v == null ? null : convertUnit(p.v, meta.unit as string, cat, prefs),
+  }));
+}
 
 /* ---------- utils ---------- */
 function timeAgo(iso?: string | null) {
@@ -193,7 +218,6 @@ function classify(
   if (value == null || thr == null) return "gray";
   const r = thr.ranges;
 
-  // object shape
   const tryObj = (color: "green" | "yellow" | "red") => {
     if (r && Array.isArray(r[color]) && r[color].length === 2) {
       const [min, max] = r[color];
@@ -205,7 +229,6 @@ function classify(
   if (tryObj("yellow")) return "yellow";
   if (tryObj("green")) return "green";
 
-  // array shape
   if (Array.isArray(r)) {
     for (const band of r) {
       const min = band?.min ?? null;
@@ -230,6 +253,16 @@ function statusClasses(c: "green" | "yellow" | "red" | "gray") {
     default:
       return "border-border bg-card";
   }
+}
+
+/* ---------- Direction helpers ---------- */
+function isDirectionParam(name?: string | null) {
+  return !!name && name.toLowerCase().includes("direction");
+}
+function cardinalFromDeg(angle: number) {
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  const idx = Math.round(((angle % 360) / 360) * 16) % 16;
+  return dirs[idx];
 }
 
 /* ---------- tiny sparkline (no deps) ---------- */
@@ -335,15 +368,15 @@ export default function Monitor() {
   const [showUnits, setShowUnits] = useState(false);
 
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
-  const [cycleIndex, setCycleIndex] = useState(0); // index into spotList
+  const [cycleIndex, setCycleIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
   /* --- Live alert toasts --- */
   type Toast = {
-    id: string; // alert_event id
+    id: string;
     severity: string;
     title: string;
-    time: string; // local HH:MM
+    time: string;
     message: string;
     throttled: boolean;
   };
@@ -382,12 +415,7 @@ export default function Monitor() {
         { event: "INSERT", schema: "public", table: "alert_events", filter: `team_id=eq.${currentTeamId}` },
         (payload) => pushToast(payload.new as AlertEvent)
       )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") console.log("[monitor] realtime: SUBSCRIBED");
-        if (status === "TIMED_OUT") console.warn("[monitor] realtime: TIMED_OUT");
-        if (status === "CHANNEL_ERROR") console.warn("[monitor] realtime: CHANNEL_ERROR");
-        if (status === "CLOSED") console.warn("[monitor] realtime: CLOSED");
-      });
+      .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [currentTeamId, pushToast]);
 
@@ -466,7 +494,7 @@ export default function Monitor() {
       const [{ data: bs }, { data: tsTeam }, { data: tsGlobal }] = await Promise.all([
         supabase
           .from("buoys")
-          .select("buoy_id,name,location_nickname,webcam,latitude,longitude,status") // include status
+          .select("buoy_id,name,location_nickname,webcam,latitude,longitude,status")
           .in("buoy_id", ids),
         supabase
           .from("monitor_tiles")
@@ -550,66 +578,61 @@ export default function Monitor() {
     return () => { cancelled = true; };
   }, [tiles]);
 
-/* latest values via RPC: refresh ~30s */
-useEffect(() => {
-  let cancelled = false;
+  /* latest values via RPC: refresh ~30s */
+  useEffect(() => {
+    let cancelled = false;
 
-  async function loadLatest() {
-    // how far back we allow "latest" to be considered (tweak as you like)
-    const CUTOFF_HOURS = 24; // e.g. show only points within the last 24h
-    const cutoffISO = new Date(Date.now() - CUTOFF_HOURS * 60 * 60 * 1000).toISOString();
+    async function loadLatest() {
+      const CUTOFF_HOURS = 24;
+      const cutoffISO = new Date(Date.now() - CUTOFF_HOURS * 60 * 60 * 1000).toISOString();
 
-    // pre-fill with nulls so tiles always render deterministically
-    const out: Record<number, LatestPoint> = {};
-    const byBuoy: Record<number, Tile[]> = {};
-    for (const t of tiles) {
-      (byBuoy[t.buoy_id] ??= []).push(t);
-      out[t.id] = { value: null, measured_at: null };
-    }
-
-    // fetch per-buoy using the RPC (distinct latest per parameter)
-    for (const [bStr, ts] of Object.entries(byBuoy)) {
-      const b = Number(bStr);
-      const { data, error } = await supabase.rpc("get_latest_measurements", {
-        p_buoy_id: b,
-        p_cutoff: cutoffISO,
-      });
-
-      if (error) {
-        console.warn("[monitor] get_latest_measurements error", { buoy: b, error: error.message });
-        continue;
+      const out: Record<number, LatestPoint> = {};
+      const byBuoy: Record<number, Tile[]> = {};
+      for (const t of tiles) {
+        (byBuoy[t.buoy_id] ??= []).push(t);
+        out[t.id] = { value: null, measured_at: null };
       }
 
-      // map param -> latest
-      const latestByParam = new Map<number, { value: number | null; measured_at: string | null }>();
-      for (const r of (data as any[]) ?? []) {
-        latestByParam.set(Number(r.parameter_id), {
-          value: r.value ?? null,
-          measured_at: r.measured_at ?? null,
+      for (const [bStr, ts] of Object.entries(byBuoy)) {
+        const b = Number(bStr);
+        const { data, error } = await supabase.rpc("get_latest_measurements", {
+          p_buoy_id: b,
+          p_cutoff: cutoffISO,
         });
+
+        if (error) {
+          console.warn("[monitor] get_latest_measurements error", { buoy: b, error: error.message });
+          continue;
+        }
+
+        const latestByParam = new Map<number, { value: number | null; measured_at: string | null }>();
+        for (const r of (data as any[]) ?? []) {
+          latestByParam.set(Number(r.parameter_id), {
+            value: r.value ?? null,
+            measured_at: r.measured_at ?? null,
+          });
+        }
+
+        for (const t of ts) {
+          const hit = latestByParam.get(t.parameter_id);
+          if (hit) out[t.id] = hit;
+        }
       }
 
-      // fill the tile outputs for this buoy
-      for (const t of ts) {
-        const hit = latestByParam.get(t.parameter_id);
-        if (hit) out[t.id] = hit;
-      }
+      if (!cancelled) setLatest(out);
     }
 
-    if (!cancelled) setLatest(out);
-  }
-
-  if (tiles.length) {
-    loadLatest();
-    const id = setInterval(loadLatest, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  } else {
-    setLatest({});
-  }
-}, [tiles]);
+    if (tiles.length) {
+      loadLatest();
+      const id = setInterval(loadLatest, 30_000);
+      return () => {
+        cancelled = true;
+        clearInterval(id);
+      };
+    } else {
+      setLatest({});
+    }
+  }, [tiles]);
 
   /* sparklines last 24h: refresh ~5m */
   useEffect(() => {
@@ -667,19 +690,15 @@ useEffect(() => {
   }, [tiles]);
 
   const buoyIds = useMemo(() => buoys.map((b) => b.buoy_id), [buoys]);
-
   const activeBuoyIds = useMemo(
     () => buoys.filter((b) => b.status !== "inactive").map((b) => b.buoy_id),
     [buoys]
   );
-
-  // List to cycle in Spotlight: prefer active, else all
   const spotList = useMemo(
     () => (activeBuoyIds.length ? activeBuoyIds : buoyIds),
     [activeBuoyIds, buoyIds]
   );
 
-  // If spot list changes and cycleIndex is out-of-bounds, clamp to 0
   useEffect(() => {
     if (cycleIndex >= spotList.length) setCycleIndex(0);
   }, [spotList.length, cycleIndex]);
@@ -694,7 +713,7 @@ useEffect(() => {
     return Array.from(set);
   }, [tiles, latest, thresholds]);
 
-  /* === Spotlight scheduler: fixed 30s rotation, skip inactive === */
+  /* Spotlight scheduler: fixed 30s rotation, skip inactive */
   const intervalRef = useRef<number | null>(null);
   useEffect(() => {
     if (layout !== "spotlight" || paused || spotList.length === 0) {
@@ -704,7 +723,7 @@ useEffect(() => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     intervalRef.current = window.setInterval(() => {
       setCycleIndex((i) => (i + 1) % spotList.length);
-    }, 30_000); // fixed 30 seconds
+    }, 30_000);
     return () => {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     };
@@ -729,7 +748,6 @@ useEffect(() => {
   /* UI density */
   const cardPad = settings?.tile_density === "compact" ? "p-2" : "p-3";
 
-  /* controls */
   const Controls = () => (
     <div className="flex flex-wrap items-center gap-2">
       <div className="rounded-lg border border-border bg-card px-2 py-1 text-xs">
@@ -772,7 +790,7 @@ useEffect(() => {
   /* render */
   return (
     <section className="mx-auto max-w-[1400px] px-3 py-4 space-y-4">
-      {/* Live alert toasts (top-right, manual dismiss) */}
+      {/* Live alert toasts */}
       <div
         className="pointer-events-none fixed right-3 top-3 z-[2000] flex w-[min(92vw,420px)] flex-col gap-2"
         role="status"
@@ -834,88 +852,10 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* body */}
-      {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
-          ))}
-        </div>
-      ) : buoys.length === 0 ? (
-        <div className="text-sm text-muted">No buoys configured for this team.</div>
-      ) : layout === "grid" ? (
-        /* GRID */
-        Object.entries(groupedByBuoy).map(([bStr, list]) => {
-          const b = buoysById[Number(bStr)];
-          return (
-            <div key={bStr} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">{b?.name ?? `Buoy ${bStr}`}</h2>
-                <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {/* webcam tile */}
-                {settings?.show_webcam && b?.webcam && (
-                  <div className={`rounded-xl border border-border bg-card ${cardPad}`}>
-                    <div className="mb-1 text-sm font-medium">Webcam</div>
-                    <VideoTile src={b.webcam!} />
-                  </div>
-                )}
-
-                {list.map((t) => {
-                  const meta = params[`${t.buoy_id},${t.parameter_id}`];
-                  const unit = meta?.unit ?? "";
-                  const name = t.label || meta?.standard_name || `Param ${t.parameter_id}`;
-                  const last = latest[t.id];
-                  const thr = t.thresholds_id ? thresholds[t.thresholds_id] : undefined;
-                  const color = classify(last?.value, thr);
-                  const series = settings?.show_sparklines ? sparks[t.id] ?? [] : [];
-
-                  return (
-                    <div
-                      key={t.id}
-                      className={`rounded-xl border ${cardPad} shadow-soft ${statusClasses(color)}`}
-                    >
-                      <div className="text-sm font-medium truncate">{name}</div>
-                      <div className="mt-1 text-2xl font-semibold">
-                        {last?.value != null ? Number(last.value).toFixed(2) : "—"}
-                        <span className="ml-1 text-sm text-muted">{unit}</span>
-                      </div>
-                      <div className="mt-1 text-xs text-muted">{timeAgo(last?.measured_at)}</div>
-                      {t.depth != null && (
-                        <div className="mt-0.5 text-[11px] text-muted">
-                          Depth: {Number(t.depth).toFixed(1)} m
-                        </div>
-                      )}
-                      {series.length > 1 && <Sparkline points={series} />}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })
-      ) : (
-        /* SPOTLIGHT: same grid, cycling through spotList every 30s */
-        (() => {
-          const bId = spotList[cycleIndex] ?? spotList[0];
-          const b = bId != null ? buoysById[bId] : undefined;
-          const list = bId != null ? (groupedByBuoy[bId] ?? []) : [];
-
-          if (!b) return null;
-
-          return (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-lg font-semibold">{b?.name}</div>
-                <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
-              </div>
-
-{/* Units floating button (bottom-right) */}
-      <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
+      {/* Units floating button (bottom-right) */}
+      <div className="fixed right-7 bottom-[4.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
         <button
-          className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-black shadow-soft"
+          className="rounded-xl border border-2 border-blue-300 border-solid border-border bg-card/80 px-3 py-2 text-sm shadow-soft backdrop-blur"
           onClick={() => setShowUnits((s) => !s)}
           aria-expanded={showUnits}
         >
@@ -956,6 +896,26 @@ useEffect(() => {
         )}
       </div>
 
+      {/* body */}
+      {loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
+          ))}
+        </div>
+      ) : buoys.length === 0 ? (
+        <div className="text-sm text-muted">No buoys configured for this team.</div>
+      ) : layout === "grid" ? (
+        /* GRID */
+        Object.entries(groupedByBuoy).map(([bStr, list]) => {
+          const b = buoysById[Number(bStr)];
+          return (
+            <div key={bStr} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">{b?.name ?? `Buoy ${bStr}`}</h2>
+                <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {/* webcam tile */}
                 {settings?.show_webcam && b?.webcam && (
@@ -967,12 +927,128 @@ useEffect(() => {
 
                 {list.map((t) => {
                   const meta = params[`${t.buoy_id},${t.parameter_id}`];
-                  const unit = meta?.unit ?? "";
-                  const name = t.label || meta?.standard_name || `Param ${t.parameter_id}`;
+
+                  // direction formatting override
+                  const isDir = isDirectionParam(meta?.standard_name);
                   const last = latest[t.id];
+                  const rawVal = last?.value;
+
+                  const name = t.label || meta?.standard_name || `Param ${t.parameter_id}`;
                   const thr = t.thresholds_id ? thresholds[t.thresholds_id] : undefined;
-                  const color = classify(last?.value, thr);
-                  const series = settings?.show_sparklines ? sparks[t.id] ?? [] : [];
+                  const color = classify(rawVal, thr);
+
+                  const baseSeries = settings?.show_sparklines ? (sparks[t.id] ?? []) : [];
+                  const series = convertSeriesToPrefs(baseSeries, meta, unitPreferences);
+
+                  const depthText =
+                    t.depth == null
+                      ? null
+                      : unitPreferences.distance === "ft"
+                      ? `${(Number(t.depth) * 3.28084).toFixed(1)} ft`
+                      : `${Number(t.depth).toFixed(1)} m`;
+
+                  // compute displayed value
+                  let valueEl: React.ReactNode;
+                  if (isDir) {
+                    const deg = typeof rawVal === "number" ? rawVal : 0;
+                    valueEl = (
+                      <div className="mt-1 text-2xl font-semibold">
+                        {cardinalFromDeg(deg)} <span className="text-sm text-muted">({deg.toFixed(0)}°)</span>
+                      </div>
+                    );
+                  } else {
+                    const resolved = resolveDisplay(rawVal, meta, unitPreferences);
+                    valueEl = (
+                      <div className="mt-1 text-2xl font-semibold">
+                        {resolved.value != null ? Number(resolved.value).toFixed(2) : "—"}
+                        <span className="ml-1 text-sm text-muted">{resolved.unit}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={t.id}
+                      className={`rounded-xl border ${cardPad} shadow-soft ${statusClasses(color)}`}
+                    >
+                      <div className="text-sm font-medium truncate">{name}</div>
+                      {valueEl}
+                      <div className="mt-1 text-xs text-muted">{timeAgo(last?.measured_at)}</div>
+                      {depthText && (
+                        <div className="mt-0.5 text-[11px] text-muted">Depth: {depthText}</div>
+                      )}
+                      {series.length > 1 && <Sparkline points={series} />}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })
+      ) : (
+        /* SPOTLIGHT: same grid, cycling through spotList every 30s */
+        (() => {
+          const bId = spotList[cycleIndex] ?? spotList[0];
+          const b = bId != null ? buoysById[bId] : undefined;
+          const list = bId != null ? (groupedByBuoy[bId] ?? []) : [];
+
+          if (!b) return null;
+
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-lg font-semibold">{b?.name}</div>
+                <div className="text-xs text-muted">{b?.location_nickname ?? "—"}</div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {/* webcam tile */}
+                {settings?.show_webcam && b?.webcam && (
+                  <div className={`rounded-xl border border-border bg-card ${cardPad}`}>
+                    <div className="mb-1 text-sm font-medium">Webcam</div>
+                    <VideoTile src={b.webcam!} />
+                  </div>
+                )}
+
+                {list.map((t) => {
+                  const meta = params[`${t.buoy_id},${t.parameter_id}`];
+
+                  const isDir = isDirectionParam(meta?.standard_name);
+                  const last = latest[t.id];
+                  const rawVal = last?.value;
+
+                  const name = t.label || meta?.standard_name || `Param ${t.parameter_id}`;
+                  const thr = t.thresholds_id ? thresholds[t.thresholds_id] : undefined;
+                  const color = classify(rawVal, thr);
+
+                  const baseSeries = settings?.show_sparklines ? (sparks[t.id] ?? []) : [];
+                  const series = convertSeriesToPrefs(baseSeries, meta, unitPreferences);
+
+                  const depthText =
+                    t.depth == null
+                      ? null
+                      : unitPreferences.distance === "ft"
+                      ? `${(Number(t.depth) * 3.28084).toFixed(1)} ft`
+                      : `${Number(t.depth).toFixed(1)} m`;
+
+                  let valueEl: React.ReactNode;
+                  if (isDir) {
+                    const deg = typeof rawVal === "number" ? rawVal : 0;
+                    valueEl = (
+                      <div className="mt-2 text-4xl font-semibold">
+                        {cardinalFromDeg(deg)}{" "}
+                        <span className="text-base text-muted">({deg.toFixed(0)}°)</span>
+                      </div>
+                    );
+                  } else {
+                    const resolved = resolveDisplay(rawVal, meta, unitPreferences);
+                    valueEl = (
+                      <div className="mt-2 text-4xl font-semibold">
+                        {resolved.value != null ? Number(resolved.value).toFixed(2) : "—"}
+                        <span className="ml-2 text-base text-muted">{resolved.unit}</span>
+                      </div>
+                    );
+                  }
 
                   return (
                     <div
@@ -980,15 +1056,10 @@ useEffect(() => {
                       className={`rounded-xl border ${cardPad} text-lg shadow-soft ${statusClasses(color)}`}
                     >
                       <div className="font-medium truncate">{name}</div>
-                      <div className="mt-2 text-4xl font-semibold">
-                        {last?.value != null ? Number(last.value).toFixed(2) : "—"}
-                        <span className="ml-2 text-base text-muted">{unit}</span>
-                      </div>
+                      {valueEl}
                       <div className="mt-2 text-xs text-muted">{timeAgo(last?.measured_at)}</div>
-                      {t.depth != null && (
-                        <div className="mt-1 text-xs text-muted">
-                          Depth: {Number(t.depth).toFixed(1)} m
-                        </div>
+                      {depthText && (
+                        <div className="mt-1 text-xs text-muted">Depth: {depthText}</div>
                       )}
                       {series.length > 1 && <Sparkline points={series} height={48} />}
                     </div>

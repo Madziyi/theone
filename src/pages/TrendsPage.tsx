@@ -89,8 +89,14 @@ function convertUnit(
 
 const isEastVel = (name: string | null) => !!name && /eastward\s+(water\s+)?velocity/i.test(name);
 const isNorthVel = (name: string | null) => !!name && /northward\s+(water\s+)?velocity/i.test(name);
+const isDirectionName = (name?: string | null) => !!name && /\bdirection\b/i.test(name ?? "");
 
-// 24-hour tick formatting (no AM/PM), range-aware
+function cardinalFromDeg(angle: number) {
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  const idx = Math.round(((angle % 360) / 360) * 16) % 16;
+  return dirs[idx];
+}
+
 const formatXAxisTick = (timestamp: string, range: RangeKey): string => {
   const d = new Date(timestamp);
   if (Number.isNaN(d.getTime())) return "";
@@ -104,7 +110,6 @@ const formatXAxisTick = (timestamp: string, range: RangeKey): string => {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
-// Ensures numbers serialize in a way CSV parsers treat as numeric cells
 function formatCsvNumber(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "";
   const abs = Math.abs(v);
@@ -117,20 +122,26 @@ function SingleSeriesTooltip({
   payload,
   label,
   displayUnit,
+  isDirection = false,
 }: {
   active?: boolean;
   payload?: any[];
   label?: string;
   displayUnit: string;
+  isDirection?: boolean;
 }) {
   if (!active || !payload || !payload.length) return null;
-  const v = payload[0]?.value;
-  const val = typeof v === "number" ? v.toFixed(2) : v;
+  const raw = payload[0]?.value as number | null;
   const when = new Date(label ?? "").toLocaleString(undefined, { hour12: false });
+
+  const content = isDirection && typeof raw === "number"
+    ? `${cardinalFromDeg(raw)} (${Math.round(raw)}°)`
+    : `${payload[0]?.name ?? "Value"}: ${typeof raw === "number" ? (raw as number).toFixed(2) : raw} ${displayUnit}`;
+
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2 text-sm shadow-soft">
       <div className="font-medium">{when}</div>
-      <div className="mt-1">{`${payload[0]?.name ?? "Value"}: ${val} ${displayUnit}`}</div>
+      <div className="mt-1">{content}</div>
     </div>
   );
 }
@@ -143,12 +154,17 @@ function MultiSeriesTooltip({ active, payload, label }: { active?: boolean; payl
       <div className="font-medium">{when}</div>
       <div className="mt-1 space-y-0.5">
         {payload.map((p) => {
-          const val = typeof p.value === "number" ? p.value.toFixed(2) : p.value;
+          const name: string = p.name ?? "";
+          const val = typeof p.value === "number" ? p.value : null;
+          const isDir = /\bdirection\b/i.test(name);
+          const labelVal = isDir && typeof val === "number"
+            ? `${cardinalFromDeg(val)} (${Math.round(val)}°)`
+            : (typeof p.value === "number" ? p.value.toFixed(2) : p.value);
           return (
             <div key={p.dataKey} className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full" style={{ background: p.color }} />
-              <span className="truncate">{p.name}</span>
-              <span className="ml-auto">{val}</span>
+              <span className="truncate">{name}</span>
+              <span className="ml-auto">{labelVal}</span>
             </div>
           );
         })}
@@ -173,6 +189,17 @@ function buildTenMinuteGrid(startISO: string, endISO: string) {
   const step = 10 * 60 * 1000;
   for (let t = Math.ceil(start / step) * step; t <= end; t += step) grid.push(new Date(t).toISOString());
   return grid;
+}
+
+// Local <-> ISO helpers for datetime-local
+function pad2(n: number) { return String(n).padStart(2, "0"); }
+function toLocalInputValue(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function isoToLocalInput(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return toLocalInputValue(d);
 }
 
 // Unified “save as…” with fallback
@@ -267,7 +294,6 @@ export default function TrendsPage() {
         depth: r.depth ?? null,
       }));
 
-      // Hide eastward/northward only; allow "Current speed"/"Current direction" if present in DB
       const visible = list
         .filter((p) => !isEastVel(p.standard_name) && !isNorthVel(p.standard_name))
         .sort((a, b) => (a.standard_name ?? "").localeCompare(b.standard_name ?? ""));
@@ -315,6 +341,7 @@ export default function TrendsPage() {
 
   const selectedParam = params.find((p) => String(p.parameter_id) === paramId) ?? null;
   const mainCat = getCategory(selectedParam?.standard_name ?? null, selectedParam?.unit ?? "");
+  const isDirection = isDirectionName(selectedParam?.standard_name);
 
   const points = useMemo(() => {
     return rows.map((r) => {
@@ -326,14 +353,14 @@ export default function TrendsPage() {
   }, [rows, mainCat, unitPreferences]);
 
   const yUnitLabel = useMemo(() => {
+    if (isDirection) return "°";
     if (!mainCat) return selectedParam?.unit ?? "";
     return String(unitPreferences[mainCat] ?? selectedParam?.unit ?? "");
-  }, [mainCat, unitPreferences, selectedParam]);
+  }, [mainCat, unitPreferences, selectedParam, isDirection]);
 
   /* ------------------------------- Exports ------------------------------- */
 
   const BOM = "\uFEFF";
-  // CSV helpers: quote headers safely; keep numbers as bare values
   const escHeader = (s: string) =>
     `"${String(s).replace(/\r?\n/g, " ").replace(/,/g, " ").replace(/"/g, '""').trim()}"`;
   const quoteTs = (iso: string) => `"${iso}"`;
@@ -356,7 +383,6 @@ export default function TrendsPage() {
 
   const exportAllCsv = async () => {
     const grid = buildTenMinuteGrid(startISO, endISO);
-    // Exclude eastward/northward velocity from "all parameters" export
     const filteredParams = params.filter(
       (p) => !/(eastward|northward)\s+velocity/i.test(p.standard_name ?? "")
     );
@@ -382,7 +408,7 @@ export default function TrendsPage() {
             last =
               row.value == null || !cat ? row.value : convertUnit(row.value, row.unit, cat, unitPreferences).value;
           }
-        values.push(last);
+          values.push(last);
         }
         return { header: `${p.standard_name ?? `p_${p.parameter_id}`} (${preferredUnit})`, values };
       })
@@ -416,25 +442,29 @@ export default function TrendsPage() {
   /* ------------------------------- UI ------------------------------- */
 
   const buoyItems = buoys.map((b) => ({ value: String(b.buoy_id), label: b.name }));
-  // Hide eastward/northward velocity parameters in Trends selects
   const paramItems = params
     .filter(p => !/(eastward|northward)\s+velocity/i.test(p.standard_name ?? ""))
     .map((p) => ({ value: String(p.parameter_id), label: p.standard_name ?? `Param ${p.parameter_id}` }));
 
+  const yTickFmt = (v: number) => {
+    if (!Number.isFinite(v)) return "";
+    return (v as number).toFixed(2);
+    };
+
   return (
     <section className="max-w-7xl mx-auto px-3 py-4 space-y-4 overflow-x-hidden">
-      {/* Controls: unified flex bar; wraps nicely on narrow widths */}
-       <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+      {/* Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
         <div className="flex gap-2 flex-1 min-w-0 basis-full sm:basis-auto">
-      <div className="min-w-0">
-        <Select className="w-full" items={buoyItems.length ? buoyItems : [{ value: "", label: "Select buoy" }]} value={buoy} onValueChange={setBuoy} placeholder="Buoy" aria-label="Buoy"/>
-      </div>
-      <div className="min-w-0">
-        <Select className="w-full" items={paramItems.length ? paramItems : [{ value: "", label: "Select parameter" }]} value={paramId} onValueChange={setParamId} placeholder="Parameter" aria-label="Parameter"/>
-      </div>
-    </div>
+          <div className="min-w-0">
+            <Select className="w-full" items={buoyItems.length ? buoyItems : [{ value: "", label: "Select buoy" }]} value={buoy} onValueChange={setBuoy} placeholder="Buoy" aria-label="Buoy"/>
+          </div>
+          <div className="min-w-0">
+            <Select className="w-full" items={paramItems.length ? paramItems : [{ value: "", label: "Select parameter" }]} value={paramId} onValueChange={setParamId} placeholder="Parameter" aria-label="Parameter"/>
+          </div>
+        </div>
 
-        {/* Middle: time range pills */}
+        {/* Time range pills */}
         <div className="no-scrollbar min-w-[260px] flex-1 overflow-x-auto">
           <Tabs value={range} onValueChange={(v) => setRange(v as RangeKey)}>
             <TabsList className="flex flex-wrap gap-1 p-1 rounded-xl">
@@ -488,29 +518,34 @@ export default function TrendsPage() {
           <div className="h-[70vh] min-h-[460px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
-              data={points}
-              margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-              key={`${paramId}-${yUnitLabel}`}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="ts"
-                tickFormatter={(tick: string) => formatXAxisTick(tick, range)}
-                interval="preserveStartEnd"
-                minTickGap={50}
-                angle={-20}
-                textAnchor="end"
-                height={50}
-                tick={{ fontSize: 10 }}
+                data={points}
+                margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                key={`${paramId}-${yUnitLabel}`}
               >
-                <Label value="Timeline" offset={0} position="insideBottom" style={{ fontWeight: "bold" }} />
-              </XAxis>
-              <YAxis domain={["auto", "auto"]} tickFormatter={(v: number) => (Number.isFinite(v) ? v.toFixed(2) : "")} tick={{ fontSize: 10 }}>
-                <Label value={`${selectedParam?.standard_name ?? "Value"} (${yUnitLabel})`} angle={-90} position="insideLeft" style={{ textAnchor: "middle", fontWeight: "bold" }} />
-              </YAxis>
-              <RTooltip content={<SingleSeriesTooltip displayUnit={yUnitLabel} />} />
-              <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} connectNulls />
-            </LineChart>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="ts"
+                  tickFormatter={(tick: string) => formatXAxisTick(tick, range)}
+                  interval="preserveStartEnd"
+                  minTickGap={50}
+                  angle={-20}
+                  textAnchor="end"
+                  height={50}
+                  tick={{ fontSize: 10 }}
+                >
+                  <Label value="Timeline" offset={0} position="insideBottom" style={{ fontWeight: "bold" }} />
+                </XAxis>
+                <YAxis domain={["auto", "auto"]} tickFormatter={yTickFmt} tick={{ fontSize: 10 }}>
+                  <Label
+                    value={`${selectedParam?.standard_name ?? "Value"} (${isDirection ? "°" : yUnitLabel})`}
+                    angle={-90}
+                    position="insideLeft"
+                    style={{ textAnchor: "middle", fontWeight: "bold" }}
+                  />
+                </YAxis>
+                <RTooltip content={<SingleSeriesTooltip displayUnit={isDirection ? "°" : yUnitLabel} isDirection={isDirection} />} />
+                <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} connectNulls />
+              </LineChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -545,7 +580,7 @@ function UnitsFloatingPanel() {
   const [open, setOpen] = useState(false);
   return (
     <div className="fixed right-3 bottom-[4.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
-      <button className="rounded-xl border border-border bg-card/80 px-3 py-2 text-sm shadow-soft backdrop-blur" onClick={() => setOpen((s) => !s)} aria-expanded={open}>
+      <button className="rounded-xl border border-2 border-blue-300 border-solid border-border bg-card/80 px-3 py-2 text-sm shadow-soft backdrop-blur" onClick={() => setOpen((s) => !s)} aria-expanded={open}>
         ⚙️ Units
       </button>
       {open && (
@@ -579,9 +614,8 @@ type CompareSlot = {
   buoyName?: string;
   paramId?: string;
   paramName?: string;
-  unit?: string;
-  // data filled after fetch
-  values?: (number | null)[];
+  unit?: string;             // display unit after conversion
+  values?: (number | null)[]; // aligned to grid
 };
 
 const PALETTE = ["#2563eb", "#16a34a", "#f59e0b", "#ef4444", "#a855f7", "#06b6d4"];
@@ -597,13 +631,45 @@ function CompareModal({
   unitPreferences: ReturnType<typeof useUnitPreferences>["unitPreferences"];
   range: { startISO: string; endISO: string; range: RangeKey };
 }) {
-  const [slots, setSlots] = useState<CompareSlot[]>([{ open: true }]); // first slot visible
+  const [slots, setSlots] = useState<CompareSlot[]>([{ open: true }]);
   const [paramsByBuoy, setParamsByBuoy] = useState<Record<string, Parameter[]>>({});
   const [loading, setLoading] = useState(false);
 
-  const grid = useMemo(() => buildTenMinuteGrid(range.startISO, range.endISO), [range.startISO, range.endISO]);
+  // Local time range state for the modal (fix invalid date by using datetime-local format)
+  const [rangeKey, setRangeKey] = useState<RangeKey>(range.range);
+  const [customStart, setCustomStart] = useState<string>(
+    range.range === "custom" ? isoToLocalInput(range.startISO) : ""
+  );
+  const [customEnd, setCustomEnd] = useState<string>(
+    range.range === "custom" ? isoToLocalInput(range.endISO) : ""
+  );
 
-  // Load parameters for a given buoy on demand; hide east/north
+  // Seed defaults when switching to Custom
+  useEffect(() => {
+    if (rangeKey !== "custom") return;
+    if (!customStart || !customEnd) {
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 3600_000);
+      setCustomStart(toLocalInputValue(start));
+      setCustomEnd(toLocalInputValue(end));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeKey]);
+
+  const { localStartISO, localEndISO } = useMemo(() => {
+    if (rangeKey === "custom" && customStart && customEnd) {
+      const s = new Date(customStart);
+      const e = new Date(customEnd);
+      if (s < e) return { localStartISO: s.toISOString(), localEndISO: e.toISOString() };
+    }
+    const end = new Date();
+    const hours = rangeKey === "24h" ? 24 : rangeKey === "7d" ? 7 * 24 : 30 * 24;
+    const start = new Date(end.getTime() - hours * 3600_000);
+    return { localStartISO: start.toISOString(), localEndISO: end.toISOString() };
+  }, [rangeKey, customStart, customEnd]);
+
+  const grid = useMemo(() => buildTenMinuteGrid(localStartISO, localEndISO), [localStartISO, localEndISO]);
+
   const loadParams = async (buoyId: string) => {
     if (paramsByBuoy[buoyId]) return;
     const { data } = await supabase
@@ -623,23 +689,24 @@ function CompareModal({
     setParamsByBuoy((m) => ({ ...m, [buoyId]: visible }));
   };
 
-  // Fetch + convert + forward-fill to 10-min grid for one slot
   const hydrateSlot = async (idx: number, buoyId: string, paramId: string) => {
     setLoading(true);
     const meta = (paramsByBuoy[buoyId] ?? []).find((p) => String(p.parameter_id) === paramId);
 
-    let values: (number | null)[] = [];
-    let displayUnit = meta?.unit ?? "";
     const { data } = await supabase.rpc("get_measurement_unified", {
       param_id: Number(paramId),
-      start_time: range.startISO,
-      end_time: range.endISO,
+      start_time: localStartISO,
+      end_time: localEndISO,
     });
     const raw = (((data as unknown) ?? []) as UnifiedRow[])
       .filter((r) => String(r.buoy_id) === String(buoyId))
       .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+
     const cat = getCategory(meta?.standard_name ?? null, meta?.unit ?? "");
     const conv = (val: number, unit: string) => (cat ? convertUnit(val, unit, cat, unitPreferences).value : val);
+    const displayUnit = cat ? String(unitPreferences[cat]) : meta?.unit ?? "";
+
+    const values: (number | null)[] = [];
     let i = 0;
     let last: number | null = null;
     for (const g of grid) {
@@ -650,7 +717,6 @@ function CompareModal({
       }
       values.push(last);
     }
-    displayUnit = cat ? String(unitPreferences[cat]) : meta?.unit ?? "";
 
     setSlots((prev) => {
       const copy = [...prev];
@@ -660,30 +726,98 @@ function CompareModal({
     setLoading(false);
   };
 
+  // Re-hydrate completed slots when local range changes
+  useEffect(() => {
+    slots.forEach((s, i) => {
+      if (s.buoyId && s.paramId) hydrateSlot(i, s.buoyId, s.paramId);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localStartISO, localEndISO]);
+
   // Compact dataset aligned to the grid for Recharts
   const data = useMemo(() => {
     return grid.map((iso, idx) => ({
-      ts: new Date(iso).toLocaleString(undefined, { hour12: false }),
+      ts: iso, 
       ...Object.fromEntries(slots.map((s, i) => [`s${i}`, s.values ? s.values[idx] ?? null : null])),
     }));
   }, [grid, slots]);
 
-  const complete = slots.filter((s) => s.buoyId && s.paramId);
-  const units = Array.from(new Set(complete.map((s) => s.unit)));
-  const dualAxes = complete.length === 2 && units.length === 2;
-  const requireSameUnit = complete.length >= 3;
-  const firstUnit = complete[0]?.unit ?? null;
+  const complete = slots
+    .map((s, i) => ({ ...s, _idx: i }))
+    .filter((s): s is Required<typeof s> & { _idx: number } => !!s.buoyId && !!s.paramId && !!s.values && typeof s.unit === "string");
+
+  // ==== Multi-axis logic (unrestricted): one YAxis per unique unit, alternating sides ====
+  const unitOrder: string[] = [];
+  complete.forEach((s) => {
+    if (!unitOrder.includes(s.unit)) unitOrder.push(s.unit);
+  });
+  const unitAxisMap = new Map<string, { id: string; orientation: "left" | "right" }>();
+  unitOrder.forEach((u, i) => {
+    unitAxisMap.set(u, { id: `u${i}`, orientation: i % 2 === 0 ? "left" : "right" });
+  });
+
+  // Export PNG for modal chart
+  const compareChartRef = useRef<HTMLDivElement>(null);
+  const exportComparePNG = async () => {
+    if (!compareChartRef.current) return;
+    const canvas = await html2canvas(compareChartRef.current, { backgroundColor: "#fff" });
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+    if (!blob) return;
+    await saveOrDownload(
+      blob,
+      `compare_${rangeToken(rangeKey, localStartISO, localEndISO)}.png`,
+      "PNG file",
+      "image/png"
+    );
+  };
 
   return (
     <div className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-sm">
       <div className="absolute inset-0 overflow-y-auto overflow-x-hidden">
         <div className="mx-auto max-w-7xl p-1 space-y-2 bg-white text-black dark:bg-gradient-to-br dark:from-[#0b1a2b] dark:to-[#132c47] dark:text-white min-h-full rounded-none">
           <div className="mx-auto max-w-7xl space-y-2 p-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Compare Parameters</h2>
-              <button className="h-10 rounded-xl border border-border bg-card px-2 text-sm" onClick={onClose}>
-                Close
-              </button>
+            {/* Header row with local range + export + close */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-lg font-semibold">Compare Parameters</div>
+
+              <div className="flex items-center gap-2">
+                <Tabs value={rangeKey} onValueChange={(v) => setRangeKey(v as RangeKey)}>
+                  <TabsList className="flex gap-1 rounded-xl">
+                    <TabsTrigger value="24h" className="px-3">24h</TabsTrigger>
+                    <TabsTrigger value="7d" className="px-3">7d</TabsTrigger>
+                    <TabsTrigger value="30d" className="px-3">30d</TabsTrigger>
+                    <TabsTrigger value="custom" className="px-3">Custom</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
+                {rangeKey === "custom" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="datetime-local"
+                      className="h-9 rounded-lg border border-border bg-card px-2 text-sm"
+                      value={customStart}
+                      onChange={(e) => setCustomStart(e.target.value)}
+                      aria-label="Custom start"
+                    />
+                    <input
+                      type="datetime-local"
+                      className="h-9 rounded-lg border border-border bg-card px-2 text-sm"
+                      value={customEnd}
+                      onChange={(e) => setCustomEnd(e.target.value)}
+                      aria-label="Custom end"
+                    />
+                  </div>
+                )}
+
+                <button className="h-9 rounded-xl border border-border bg-primary px-3 text-sm text-white"
+                        onClick={exportComparePNG} disabled={!complete.length}>
+                  Export PNG
+                </button>
+
+                <button className="h-9 rounded-xl border border-border bg-card px-2 text-sm" onClick={onClose}>
+                  Close
+                </button>
+              </div>
             </div>
 
             {/* Collapsible, sequential slots */}
@@ -691,7 +825,7 @@ function CompareModal({
               {slots.map((slot, idx) => {
                 const title =
                   slot.buoyId && slot.paramId
-                    ? `${slot.buoyName ?? ""} (${slot.paramName ?? ""})`
+                    ? `${slot.buoyName ?? ""} (${slot.paramName ?? ""})${slot.unit ? ` [${slot.unit}]` : ""}`
                     : `Pick ${["1st", "2nd", "3rd", "4th", "5th", "6th"][idx]} parameter`;
 
                 const canShow = idx === 0 || (slots[idx - 1].buoyId && slots[idx - 1].paramId);
@@ -699,69 +833,88 @@ function CompareModal({
 
                 return (
                   <div key={idx} className="rounded-2xl border border-border p-2 overflow-visible">
-                    {/* Header trigger — looks like a dropdown */}
-                    <button
-                      className="group w-full flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-left text-sm font-medium"
-                      onClick={() =>
-                        setSlots((prev) => {
-                          const c = [...prev];
-                          c[idx] = { ...c[idx], open: !c[idx].open };
-                          return c;
-                        })
-                      }
-                    >
-                      <span className="overflow-hidden text-ellipsis">{title}</span>
-                      <ChevronDown
-                        className={`ml-2 h-4 w-4 transition-transform duration-200 ${slot.open ? "rotate-180" : "rotate-0"}`}
-                        aria-hidden="true"
-                      />
-                    </button>
+                    {/* Header with dropdown + remove (X) */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="group flex-1 flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-left text-sm font-medium"
+                        onClick={() =>
+                          setSlots((prev) => {
+                            const c = [...prev];
+                            c[idx] = { ...c[idx], open: !c[idx].open };
+                            return c;
+                          })
+                        }
+                      >
+                        <span className="overflow-hidden text-ellipsis">{title}</span>
+                        <ChevronDown
+                          className={`ml-2 h-4 w-4 shrink-0 transition-transform duration-200 ${slot.open ? "rotate-180" : "rotate-0"}`}
+                          aria-hidden="true"
+                        />
+                      </button>
+
+                      <button
+                        className="shrink-0 rounded-lg border border-border bg-card px-2 py-2 text-xs hover:bg-accent/30"
+                        aria-label={`Remove selection ${idx + 1}`}
+                        onClick={() =>
+                          setSlots((prev) => {
+                            const next = prev.filter((_, i) => i !== idx);
+                            return next.length ? next : [{ open: true }];
+                          })
+                        }
+                      >
+                        ❌
+                      </button>
+                    </div>
 
                     {/* Body: two inline selects */}
                     {slot.open && (
                       <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        <div className="min-w-0"><Select className="w-full"
-                          items={buoys.map((b) => ({ value: String(b.buoy_id), label: b.name }))}
-                          value={slot.buoyId ?? ""}
-                          onValueChange={async (v) => {
-                            await loadParams(v);
-                            const buoyName = buoys.find((b) => String(b.buoy_id) === v)?.name;
-                            setSlots((prev) => {
-                              const c = [...prev];
-                              c[idx] = { open: true, buoyId: v, buoyName, paramId: undefined, paramName: undefined, unit: undefined, values: [] };
-                              return c;
-                            });
-                          }}
-                          placeholder="Select buoy"
-                          aria-label={`Compare buoy ${idx + 1}`}
-                        /></div>
-                        <div className="min-w-0"><Select className="w-full"
-                          items={(paramsByBuoy[slot.buoyId ?? ""] ?? []).map((p) => {
-                            const cat = getCategory(p.standard_name, p.unit ?? "");
-                            const displayUnit = cat ? String(unitPreferences[cat]) : p.unit ?? "";
-                            const disabled = !!(requireSameUnit && firstUnit && displayUnit !== firstUnit && !(slot.paramId && String(slot.paramId) === String(p.parameter_id)));
-                            return { value: String(p.parameter_id), label: p.standard_name ?? `Param ${p.parameter_id}`, disabled };
-                          })}
-                          value={slot.paramId ?? ""}
-                          onValueChange={async (v) => {
-                            const meta = (paramsByBuoy[slot.buoyId ?? ""] ?? []).find((p) => String(p.parameter_id) === v);
-                            setSlots((prev) => {
-                              const c = [...prev];
-                              c[idx] = { ...c[idx], paramId: v, paramName: meta?.standard_name ?? "" };
-                              return c;
-                            });
-                            if (slot.buoyId) await hydrateSlot(idx, slot.buoyId, v);
-                            // collapse this slot and reveal next
-                            setSlots((prev) => {
-                              const c = [...prev];
-                              c[idx] = { ...c[idx], open: false };
-                              if (idx === c.length - 1 && c.length < 6) c.push({ open: true });
-                              return c;
-                            });
-                          }}
-                          placeholder="Select parameter"
-                          aria-label={`Compare parameter ${idx + 1}`}
-                        /></div>
+                        <div className="min-w-0">
+                          <Select
+                            className="w-full"
+                            items={buoys.map((b) => ({ value: String(b.buoy_id), label: b.name }))}
+                            value={slot.buoyId ?? ""}
+                            onValueChange={async (v) => {
+                              await loadParams(v);
+                              const buoyName = buoys.find((b) => String(b.buoy_id) === v)?.name;
+                              setSlots((prev) => {
+                                const c = [...prev];
+                                c[idx] = { open: true, buoyId: v, buoyName, paramId: undefined, paramName: undefined, unit: undefined, values: [] };
+                                return c;
+                              });
+                            }}
+                            placeholder="Select buoy"
+                            aria-label={`Compare buoy ${idx + 1}`}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <Select
+                            className="w-full"
+                            items={(paramsByBuoy[slot.buoyId ?? ""] ?? []).map((p) => ({
+                              value: String(p.parameter_id),
+                              label: p.standard_name ?? `Param ${p.parameter_id}`,
+                            }))}
+                            value={slot.paramId ?? ""}
+                            onValueChange={async (v) => {
+                              const meta = (paramsByBuoy[slot.buoyId ?? ""] ?? []).find((p) => String(p.parameter_id) === v);
+                              setSlots((prev) => {
+                                const c = [...prev];
+                                c[idx] = { ...c[idx], paramId: v, paramName: meta?.standard_name ?? "" };
+                                return c;
+                              });
+                              if (slot.buoyId) await hydrateSlot(idx, slot.buoyId, v);
+                              // collapse this slot and reveal next
+                              setSlots((prev) => {
+                                const c = [...prev];
+                                c[idx] = { ...c[idx], open: false };
+                                if (idx === c.length - 1 && c.length < 6) c.push({ open: true });
+                                return c;
+                              });
+                            }}
+                            placeholder="Select parameter"
+                            aria-label={`Compare parameter ${idx + 1}`}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -770,7 +923,7 @@ function CompareModal({
             </div>
 
             {/* Chart */}
-            <div className="rounded-2xl border border-border p-3">
+            <div className="rounded-2xl border border-border p-1" ref={compareChartRef}>
               <div className="h-[70vh] min-h-[460px]">
                 {loading ? (
                   <div className="grid h-full place-items-center text-sm text-muted">Loading…</div>
@@ -782,7 +935,7 @@ function CompareModal({
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis
                         dataKey="ts"
-                        tickFormatter={(v) => formatXAxisTick(v, range.range)}
+                        tickFormatter={(v) => formatXAxisTick(v, rangeKey)}
                         interval="preserveStartEnd"
                         minTickGap={50}
                         angle={-20}
@@ -792,27 +945,45 @@ function CompareModal({
                       >
                         <Label value="Timeline" offset={0} position="insideBottom" style={{ fontWeight: "bold" }} />
                       </XAxis>
-                      <YAxis yAxisId="left" tick={{ fontSize: 10 }} domain={["auto", "auto"]}>
-                        <Label value={complete[0]?.unit ?? ""} angle={-90} position="insideLeft" style={{ textAnchor: "middle", fontWeight: "bold" }} />
-                      </YAxis>
-                      {dualAxes && (
-                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} domain={["auto", "auto"]}>
-                          <Label value={complete[1]?.unit ?? ""} angle={90} position="insideRight" style={{ textAnchor: "middle", fontWeight: "bold" }} />
-                        </YAxis>
-                      )}
+
+                      {/* Dynamic Y axes per unit, alternating sides */}
+                      {unitOrder.map((u, i) => {
+                        const conf = unitAxisMap.get(u)!;
+                        const labelAngle = conf.orientation === "left" ? -90 : 90;
+                        const labelPos = conf.orientation === "left" ? "insideLeft" : "insideRight";
+                        const labelDxOffset = conf.orientation === "left" ? -(-15) : (-5);
+                        return (
+                          <YAxis
+                            key={conf.id}
+                            yAxisId={conf.id}
+                            orientation={conf.orientation}
+                            tick={{ fontSize: 10 }}
+                            domain={["auto", "auto"]}
+                          >
+                            <Label
+                              value={u}
+                              angle={labelAngle}
+                              position={labelPos as any}
+                              style={{ textAnchor: "middle", fontWeight: "bold" }}
+                              dx={labelDxOffset}
+                            />
+                          </YAxis>
+                        );
+                      })}
+
                       <RTooltip content={<MultiSeriesTooltip />} />
                       <Legend />
-                      {slots.map((s, i) => {
-                        if (!s.paramId || !s.values) return null;
-                        const name = `${s.buoyName ?? ""} (${s.paramName ?? ""})`;
-                        const yAxisId = !dualAxes ? "left" : i === 0 ? "left" : "right";
+
+                      {complete.map((s, i) => {
+                        const unitConf = unitAxisMap.get(s.unit)!;
+                        const name = `${s.buoyName ?? ""} (${s.paramName ?? ""}) [${s.unit}]`;
                         return (
                           <Line
-                            key={`s${i}`}
+                            key={`s${s._idx}`}
                             type="monotone"
-                            dataKey={`s${i}`}
+                            dataKey={`s${s._idx}`}
                             name={name}
-                            yAxisId={yAxisId}
+                            yAxisId={unitConf.id}
                             dot={false}
                             strokeWidth={2}
                             stroke={PALETTE[i % PALETTE.length]}

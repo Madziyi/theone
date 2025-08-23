@@ -369,9 +369,9 @@ export default function BuoyStats({ buoy, onClose }: { buoy: Buoy; onClose: () =
       </div>
 
       {/* Units floating button (bottom-right) – inside overlay */}
-      <div className="fixed right-3 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
+      <div className="fixed right-7 bottom-[1.5rem] z-[1300] pb-[env(safe-area-inset-bottom)]">
         <button
-          className="rounded-xl border-2 border-solid border-blue-500 border-border bg-card/80 backdrop-blur px-3 py-2 text-sm text-primary shadow-soft"
+          className="rounded-xl border border-2 border-blue-300 border-solid border-border bg-card/80 px-3 py-2 text-sm shadow-soft backdrop-blur"
           onClick={() => setShowUnits((s) => !s)}
           aria-expanded={showUnits}
         >
