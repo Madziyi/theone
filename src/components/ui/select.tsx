@@ -31,7 +31,7 @@ const Select = memo(function Select({
       <RSelect.Trigger
         aria-label={ariaLabel}
         className={[
-          "inline-flex h-10 w-full max-w-full min-w-0 items-center justify-between gap-2",
+          "inline-flex truncate h-10 w-full max-w-full min-w-0 items-center justify-between gap-2",
           "rounded-xl border border-border bg-card px-3 text-sm shadow-soft",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]",
           "data-[placeholder]:text-muted",

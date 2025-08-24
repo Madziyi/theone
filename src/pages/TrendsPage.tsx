@@ -780,7 +780,11 @@ function CompareModal({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-lg font-semibold">Compare Parameters</div>
 
-              <div className="flex items-center gap-2">
+                <button className="h-9 rounded-xl border border-border bg-card px-2 text-sm" onClick={onClose}>
+                  Close
+                </button>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
                 <Tabs value={rangeKey} onValueChange={(v) => setRangeKey(v as RangeKey)}>
                   <TabsList className="flex gap-1 rounded-xl">
                     <TabsTrigger value="24h" className="px-3">24h</TabsTrigger>
@@ -814,9 +818,6 @@ function CompareModal({
                   Export PNG
                 </button>
 
-                <button className="h-9 rounded-xl border border-border bg-card px-2 text-sm" onClick={onClose}>
-                  Close
-                </button>
               </div>
             </div>
 
