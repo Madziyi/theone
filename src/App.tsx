@@ -8,7 +8,9 @@ import Header from "@/components/ui/Header";
 import Login from "./pages/Login";
 import BottomNav from "@/components/BottomNav";
 import ProtectedRoute from "@/components/ProtectedRoute";
-// REMOVE THIS LINE: import { TeamProvider } from "@/contexts/TeamContext";
+import ParameterDetailPage from "@/pages/ParameterDetailPage";
+import SpatialDeltaDetailPage from "@/pages/SpatialDeltaDetail";
+
 
 export default function App() {
   const { pathname } = useLocation();
@@ -39,6 +41,8 @@ export default function App() {
             element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/parameter/:buoyId/:paramId" element={<ParameterDetailPage />} />
+          <Route path="/alerts/spatial/:alertId" element={<SpatialDeltaDetailPage />} />
         </Routes>
       </main>
       <BottomNav />

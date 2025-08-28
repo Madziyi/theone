@@ -584,8 +584,17 @@ function UnitsFloatingPanel() {
         ⚙️ Units
       </button>
       {open && (
-        <div className="mt-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
-          <div className="mb-2 text-sm font-semibold">Unit Preferences</div>
+        <div className="absolute right-0 bottom-full mb-2 w-64 rounded-xl border border-border bg-card/95 p-3 shadow-soft">
+           <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Unit Preferences</h3>
+          <button
+                className="text-sm text-muted hover:opacity-80"
+                onClick={() => setOpen(false)}
+                aria-label="Close unit panel"
+              >
+                ✕
+              </button>
+          </div>
           <div className="space-y-2">
             {(Object.keys(unitPreferences) as Array<keyof typeof unitPreferences>).map((key) => (
               <label key={key} className="grid grid-cols-[1fr_auto] items-center gap-2 text-sm">
