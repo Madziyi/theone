@@ -4,13 +4,12 @@ import MapPage from "@/pages/MapPage";
 import TrendsPage from "@/pages/TrendsPage";
 import MonitorPage from "@/pages/MonitorPage";
 import DashboardPage from "@/pages/DashboardPage";
-import Header from "@/components/ui/Header";
+import Header from "@/components/Header/Header";
 import Login from "./pages/Login";
 import BottomNav from "@/components/BottomNav";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ParameterDetailPage from "@/pages/ParameterDetailPage";
 import SpatialDeltaDetailPage from "@/pages/SpatialDeltaDetail";
-
 
 export default function App() {
   const { pathname } = useLocation();

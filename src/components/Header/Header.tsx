@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useTeam } from "@/contexts/TeamContext";
-import ThemeToggle from "./ThemeToggle";
+import ThemeToggle from "../ui/ThemeToggle";
+import InboxButton from "./InboxButton";
 
 export default function Header() {
   const { currentTeam, teams, setTeam } = useTeam();
@@ -42,6 +43,7 @@ export default function Header() {
           <Link className={linkCls(pathname.startsWith("/dashboard"))} to="/dashboard">Dashboard</Link>
         </nav>
         <ThemeToggle />
+        <InboxButton/>
       </div>
     </header>
   );

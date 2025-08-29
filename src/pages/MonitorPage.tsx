@@ -3,6 +3,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase";
 import { useUnitPreferences } from "@/contexts/UnitPreferencesContext";
 import { useTeam } from "@/contexts/TeamContext";
+import OperatorsLogModal from "@/components/OperatorsLog/OperatorsLogModal";
+
 
 /* ---------- types aligned to your schema ---------- */
 type BuoyStatus = "active" | "inactive" | "retrieved";
@@ -350,6 +352,23 @@ function VideoTile({ src }: { src: string }) {
     />
   );
 }
+
+/*--------operator logs-------*/
+function MonitorHeaderExtras() {
+  const [logOpen, setLogOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="rounded-lg border border-border bg-card px-3 py-1 text-sm hover:bg-accent/30"
+        onClick={() => setLogOpen(true)}
+      >
+        Operators’ Log
+      </button>
+      <OperatorsLogModal open={logOpen} onClose={() => setLogOpen(false)} />
+    </>
+  );
+}
+
 
 /* ---------- main component ---------- */
 export default function Monitor() {
@@ -824,6 +843,7 @@ export default function Monitor() {
       {/* header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-lg font-semibold">Monitor</div>
+        <MonitorHeaderExtras />
         <Controls />
       </div>
 

@@ -8,6 +8,8 @@ import AlertsPanel from "@/components/Alerts/AlertsPanel";
 import {
   X as CloseIcon,
 } from "lucide-react";
+import DownloadCenterPanel from "@/components/DownloadCenter/DownloadCenterPanel";
+
 
 /** Types aligned to your schema */
 type Buoy = {
@@ -91,7 +93,7 @@ export default function DashboardPage() {
   const nav = useNavigate();
   const { session } = useSession();
   const { currentTeam, currentTeamId, isManager, loading: teamLoading } = useTeam();
-  const [activeTab, setActiveTab] = useState<"buoys" | "alerts">("buoys");
+  const [activeTab, setActiveTab] = useState<"buoys" | "alerts" | "downloads">("buoys");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [teamBuoys, setTeamBuoys] = useState<Buoy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,103 +182,141 @@ export default function DashboardPage() {
     }
   };
 
-  return (
-    <section className="mx-auto max-w-7xl px-3 py-4 space-y-6">
-      {/* Header as-is */}
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-[#0b1a2b] dark:to-[#132c47] p-4">
-        <div className="flex items-center gap-4">
-          {/* Team logo block unchanged */}
-          {currentTeam?.logo_url ? (
-            <img src={currentTeam.logo_url} alt={`${currentTeam.name} logo`} className="h-14 w-14 rounded-xl border border-border object-cover bg-white" />
-          ) : (
-            <div className="h-14 w-14 rounded-xl border border-border bg-card grid place-items-center text-sm">
-              {currentTeam?.name?.slice(0, 2).toUpperCase() ?? "TM"}
-            </div>
-          )}
-          <div className="min-w-0">
-            <div className="text-2xl font-semibold truncate">
-              {greeting}
-            </div>
-            <div className="text-sm text-muted truncate">
-              {currentTeam?.name ? `Team: ${currentTeam.name}` : "Loading team…"}
-            </div>
+  const openDownloadId = new URLSearchParams(location.search).get("open");
+
+return (
+  <section className="mx-auto max-w-7xl px-3 py-4 space-y-6">
+    {/* Header as-is */}
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-[#0b1a2b] dark:to-[#132c47] p-4">
+      <div className="flex items-center gap-4">
+        {/* Team logo block unchanged */}
+        {currentTeam?.logo_url ? (
+          <img
+            src={currentTeam.logo_url}
+            alt={`${currentTeam.name} logo`}
+            className="h-14 w-14 rounded-xl border border-border object-cover bg-white"
+          />
+        ) : (
+          <div className="h-14 w-14 rounded-xl border border-border bg-card grid place-items-center text-sm">
+            {currentTeam?.name?.slice(0, 2).toUpperCase() ?? "TM"}
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="text-2xl font-semibold truncate">{greeting}</div>
+          <div className="text-sm text-muted truncate">
+            {currentTeam?.name ? `Team: ${currentTeam.name}` : "Loading team…"}
           </div>
         </div>
       </div>
+    </div>
 
-      {/* Tabs */}
-      <div className="rounded-xl border border-border bg-card p-2">
-        <div className="flex gap-2">
-          <button
-            className={`h-9 rounded-lg px-3 text-sm border ${activeTab === "buoys" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"}`}
-            onClick={() => setActiveTab("buoys")}
-          >
-            Buoys
-          </button>
-          <button
-            className={`h-9 rounded-lg px-3 text-sm border ${activeTab === "alerts" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"}`}
-            onClick={() => setActiveTab("alerts")}
-          >
-            Alerts
-          </button>
-        </div>
+    {/* Tabs */}
+    <div className="rounded-xl border border-border bg-card p-2">
+      <div className="flex gap-2">
+        <button
+          className={`h-9 rounded-lg px-3 text-sm border ${
+            activeTab === "buoys"
+              ? "bg-primary text-white border-border"
+              : "bg-background border-border text-foreground hover:bg-accent/30"
+          }`}
+          onClick={() => setActiveTab("buoys")}
+        >
+          Buoys
+        </button>
+        <button
+          className={`h-9 rounded-lg px-3 text-sm border ${
+            activeTab === "alerts"
+              ? "bg-primary text-white border-border"
+              : "bg-background border-border text-foreground hover:bg-accent/30"
+          }`}
+          onClick={() => setActiveTab("alerts")}
+        >
+          Alerts
+        </button>
+        <button
+          className={`h-9 rounded-lg px-3 text-sm border ${
+            activeTab === "downloads"
+              ? "bg-primary text-white border-border"
+              : "bg-background border-border text-foreground hover:bg-accent/30"
+          }`}
+          onClick={() => setActiveTab("downloads")}
+        >
+          Downloads
+        </button>
       </div>
+    </div>
 
-      {/* Tab panels */}
-      {activeTab === "buoys" ? (
-        <>
-          {/* === Your existing Buoys section START === */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Your buoys</h2>
-              <Link to="/" className="text-sm text-white bg-primary rounded-lg border border-border bg-card px-3 py-1.5 hover:bg-accent/30" title="Open map">
-                Open map
-              </Link>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="h-28 animate-pulse rounded-xl border border-border bg-card" />
-                ))
-              ) : teamBuoys.length === 0 ? (
-                <div className="text-sm text-muted">No buoys linked to this team yet.</div>
-              ) : (
-                teamBuoys.map((b) => (
-                  <div key={b.buoy_id} className="rounded-xl border border-border bg-card p-3 shadow-soft">
-                    <div className="text-sm font-medium truncate">{b.name}</div>
-                    <div className="mt-0.5 text-xs text-muted truncate">
-                      {b.location_nickname ?? `${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}`}
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Link to={`/trends?buoy=${b.buoy_id}`} className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30">
-                        Trends
-                      </Link>
+    {/* Tab panels */}
+    {activeTab === "buoys" && (
+      <>
+        {/* === Your existing Buoys section START === */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Your buoys</h2>
+            <Link
+              to="/"
+              className="text-sm text-white bg-primary rounded-lg border border-border bg-card px-3 py-1.5 hover:bg-accent/30"
+              title="Open map"
+            >
+              Open map
+            </Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-28 animate-pulse rounded-xl border border-border bg-card"
+                />
+              ))
+            ) : teamBuoys.length === 0 ? (
+              <div className="text-sm text-muted">No buoys linked to this team yet.</div>
+            ) : (
+              teamBuoys.map((b) => (
+                <div
+                  key={b.buoy_id}
+                  className="rounded-xl border border-border bg-card p-3 shadow-soft"
+                >
+                  <div className="text-sm font-medium truncate">{b.name}</div>
+                  <div className="mt-0.5 text-xs text-muted truncate">
+                    {b.location_nickname ??
+                      `${b.latitude.toFixed(4)}, ${b.longitude.toFixed(4)}`}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      to={`/trends?buoy=${b.buoy_id}`}
+                      className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30"
+                    >
+                      Trends
+                    </Link>
+                    <button
+                      className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30"
+                      onClick={() => setSelected(b)}
+                      aria-label={`Open realtime data for ${b.name}`}
+                    >
+                      Realtime Data
+                    </button>
+                    {b.webcam ? (
                       <button
-                        className="rounded-lg border border-border bg-primary px-2.5 py-1 text-xs text-white hover:bg-accent/30"
-                        onClick={() => setSelected(b)}
-                        aria-label={`Open realtime data for ${b.name}`}
+                        className="rounded-lg border border-border bg-primary px-2.5 text-white py-1 text-xs hover:bg-accent/30"
+                        onClick={() => setShowWebcam(true)}
                       >
-                        Realtime Data
-                      </button>
-                         {b.webcam ? (
-                      <button className="rounded-lg border border-border bg-primary px-2.5 text-white py-1 text-xs hover:bg-accent/30"
-                        onClick={() => setShowWebcam(true)}>
                         Open Webcam
                       </button>
                     ) : null}
 
-                      {/* Webcam modal (onscreen popup) */}
-                      {showWebcam && b.webcam && (
-                        <WebcamModal src={b.webcam} onClose={() => setShowWebcam(false)} />
-                      )}
-                    </div>
+                    {/* Webcam modal (onscreen popup) */}
+                    {showWebcam && b.webcam && (
+                      <WebcamModal
+                        src={b.webcam}
+                        onClose={() => setShowWebcam(false)}
+                      />
+                    )}
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              ))
+            )}
           </div>
-
-          
 
           {/* Manager tools */}
           {isManager && (
@@ -343,7 +383,9 @@ export default function DashboardPage() {
                     <b>Lat:</b> {selected.latitude}, <b>Lon:</b> {selected.longitude}
                   </div>
                   {selected.location_nickname && (
-                    <div className="mt-1 text-sm text-white/80">{selected.location_nickname}</div>
+                    <div className="mt-1 text-sm text-white/80">
+                      {selected.location_nickname}
+                    </div>
                   )}
                 </div>
 
@@ -373,25 +415,27 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-          
-          {selected && (
-            <BuoyStats
-              buoy={selected}
-              onClose={() => setSelected(null)}
-            />
-          )}
 
-        </>
-      ) : (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Alerts</h2>
-          {currentTeamId ? (
-            <AlertsPanel teamId={currentTeamId} />
-          ) : (
-            <div className="text-sm text-muted">Select a team to view alerts.</div>
+          {selected && (
+            <BuoyStats buoy={selected} onClose={() => setSelected(null)} />
           )}
         </div>
-      )}
-    </section>
-  );
+      </>
+    )}
+
+    {activeTab === "alerts" && (
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Alerts</h2>
+        <AlertsPanel teamId={currentTeamId} />
+      </div>
+    )}
+
+    {activeTab === "downloads" && (
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold">Download Center</h2>
+        <DownloadCenterPanel autoOpenId={openDownloadId} />
+      </div>
+    )}
+  </section>
+);
 }
