@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 
@@ -66,6 +66,8 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [verifyEmail, setVerifyEmail] = useState<string>("");
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Welcome overlay state
   const [welcome, setWelcome] = useState<WelcomeState>({
@@ -77,13 +79,12 @@ export default function Login() {
   });
 
   // Where GoTrue should send users back after clicking the email confirmation link
-  const redirectTo = useMemo(
-    () =>
-      import.meta.env.DEV
-        ? "http://localhost:5173/auth/callback"
-        : "https://telab.apzim.com/auth/callback",
-    []
-  );
+  const redirectTo = useMemo(() => {
+    const origin = window.location.origin; // "http://localhost:5173" in dev
+    const invite = search.get("invite");
+    // Carry invite code into the email verification deep link
+    return `${origin}/auth/callback${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
+  }, [search]);
 
   // Read any invite params from URL
   useEffect(() => {
@@ -92,13 +93,43 @@ export default function Login() {
     if (search.get("prefill") === "signup") setMode("signup");
   }, [search]);
 
+
+  // NEW: resolve ?invite=ABC123 → pendingTeamId and prefill signup
+  useEffect(() => {
+    const inviteCode = search.get("invite");
+    if (!inviteCode) return;
+
+    (async () => {
+      try {
+        const { data, error } = await supabase.rpc("resolve_team_invite", { p_code: inviteCode });
+        if (error) throw error;
+        const row = (data as any[])?.[0];
+        if (row?.valid) {
+          setPendingTeamId(row.team_id);
+          setInfo(`You're joining: ${row.team_name}`);
+          setMode("signup");
+        } else {
+          setError("This invite link is invalid or expired.");
+        }
+      } catch (e: any) {
+        setError(e?.message ?? "Could not validate invite.");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // After sign-in, ensure we have an active team id stored for the app
   async function ensureActiveTeamForUser(userId: string, hintTeamId?: string | null) {
-    if (hintTeamId) {
-      await supabase
-        .from("team_members")
-        .upsert({ team_id: hintTeamId, user_id: userId, role: "member" }, { onConflict: "team_id,user_id" });
+    // use the hint or the metadata value purely to set local state
+    const { data } = await supabase.auth.getUser();
+    const metaTeam = (data?.user?.user_metadata as any)?.pending_team_id ?? null;
+    const chosen = hintTeamId || metaTeam || null;
+
+    if (chosen) {
+      localStorage.setItem("team_id", chosen);
     }
+
+    // If nothing in storage yet, pick the first membership (server trigger likely added it)
     let active = localStorage.getItem("team_id");
     if (!active) {
       const { data: memberships } = await supabase
@@ -144,8 +175,7 @@ export default function Login() {
         userFirst = (prof as any)?.first_name ?? "";
 
         // Resolve active team id
-        const activeTeamId =
-          pendingTeamId || localStorage.getItem("team_id") || null;
+        const activeTeamId = pendingTeamId || localStorage.getItem("team_id") || null;
 
         if (activeTeamId) {
           const { data: team } = await supabase
@@ -198,11 +228,30 @@ export default function Login() {
   };
 }, []);
 
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setInfo(null);
+    
+    // Abort any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -220,13 +269,21 @@ export default function Login() {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        console.error('[signup]', { status: (error as any)?.status, message: error.message });
+        throw error;
+      }
       setVerifyEmail(email);
       setMode("verify");
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Signup aborted');
+        return;
+      }
       setError(err?.message ?? "Failed to sign up.");
     } finally {
       setBusy(false);
+      abortControllerRef.current = null;
     }
   }
 
@@ -359,8 +416,7 @@ export default function Login() {
         <form onSubmit={handleSignUp} className="space-y-3 rounded-2xl border border-border p-4">
           {pendingTeamId && (
             <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              You’re joining a team via invite. Team ID:{" "}
-              <span className="font-mono">{pendingTeamId}</span>
+              You're joining a team by invite. Team ID: <span className="font-mono">{pendingTeamId}</span>
             </div>
           )}
           <div className="grid gap-1">

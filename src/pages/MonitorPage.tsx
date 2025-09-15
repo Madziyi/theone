@@ -359,7 +359,7 @@ function MonitorHeaderExtras() {
   return (
     <>
       <button
-        className="rounded-lg border border-border bg-card px-3 py-1 text-sm hover:bg-accent/30"
+        className="rounded-lg border border-border border-solid border-2 border-blue-500 bg-card px-3 py-1 text-sm hover:bg-accent/30"
         onClick={() => setLogOpen(true)}
       >
         Operators’ Log
@@ -841,14 +841,16 @@ export default function Monitor() {
       </div>
 
       {/* header row */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-lg font-semibold">Monitor</div>
+      <div className="flex pb-5 flex-wrap items-center justify-between gap-3">
+        <div className="text-3xl font-bold">Operations Monitor</div>
+         <div className="flex flex-wrap items-center justify-between gap-3">
         <MonitorHeaderExtras />
         <Controls />
+        </div>
       </div>
 
       {/* locations row (inactive chips in RED) */}
-      <div className="overflow-x-auto no-scrollbar">
+      <div className="pb-3 overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-2">
           {buoys.map((b) => {
             const inactive = b.status === "inactive";

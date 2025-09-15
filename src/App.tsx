@@ -6,10 +6,12 @@ import MonitorPage from "@/pages/MonitorPage";
 import DashboardPage from "@/pages/DashboardPage";
 import Header from "@/components/Header/Header";
 import Login from "./pages/Login";
+import AuthCallback from "./pages/AuthCallback";
 import BottomNav from "@/components/BottomNav";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ParameterDetailPage from "@/pages/ParameterDetailPage";
 import SpatialDeltaDetailPage from "@/pages/SpatialDeltaDetail";
+
 
 export default function App() {
   const { pathname } = useLocation();
@@ -26,6 +28,10 @@ export default function App() {
           <Route
             path="/login"
             element={<Login />}
+          />
+          <Route
+            path="/auth/callback"
+            element={<AuthCallback />}
           />
           <Route
             path="/trends"
