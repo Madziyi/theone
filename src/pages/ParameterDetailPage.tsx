@@ -229,7 +229,7 @@ useEffect(() => {
         .limit(1);
 
       if (data && data.length > 0) {
-        setTeamId(data.team_id); // ✅ Fix: Access first item in array
+        setTeamId(data[0].team_id); // Fix: Access first item in array
       } else {
         setTeamId(null);
       }

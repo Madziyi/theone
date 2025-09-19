@@ -274,7 +274,7 @@ export default function SpatialDeltaDetailPage() {
   const [loadingCards, setLoadingCards] = useState(true);
   const [loadingCompare, setLoadingCompare] = useState(true);
   const [range, setRange] = useState<RangeKey>("24h");
-  const [compareGrid, setCompareGrid] = useState<Array<{ ts: string; [key: string]: number | null }>>([]);
+  const [compareGrid, setCompareGrid] = useState<Array<{ ts: string; [key: string]: number | null | string }>>([]);
 
 
   useEffect(() => {
@@ -518,7 +518,7 @@ export default function SpatialDeltaDetailPage() {
       );
 
       // Build merged rows on the common grid, with per-param keys
-      const merged: Array<{ ts: string; [key: string]: number | null }> = grid.map((iso) => ({ ts: iso }));
+      const merged: Array<{ ts: string; [key: string]: number | null | string }> = grid.map((iso) => ({ ts: iso }));
       participants.forEach((p) => {
         const key = `p_${p.parameter_id}`;
         const values = forwardFillToGrid(perParamSeries[p.parameter_id] ?? [], grid);
@@ -556,7 +556,7 @@ export default function SpatialDeltaDetailPage() {
 
   const axisIdForUnit = (u: string) => `y-${uListIndex(u)}`;
   const uListIndex = (u: string) => Math.max(0, unitList.findIndex(x => x === u));
-  const axisOrientation = (idx: number) => (idx % 2 === 0 ? "left" : "right") as const;
+  const axisOrientation = (idx: number): "left" | "right" => (idx % 2 === 0 ? "left" : "right");
 
   /* ------------------------------- UI ------------------------------- */
   const headerTitle = useMemo(() => {
