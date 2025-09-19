@@ -1,11 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
 import { useTeam } from "@/contexts/TeamContext";
+import { useSession } from "@/hooks/useSession";
 import ThemeToggle from "../ui/ThemeToggle";
 import InboxButton from "./InboxButton";
 
 export default function Header() {
   const { currentTeam, teams, setTeam } = useTeam();
+  const { session } = useSession();
   const { pathname } = useLocation();
+  
+  // Debug logging
+  console.log("Header: Current team:", currentTeam?.name, "ID:", currentTeam?.id);
+  console.log("Header: Available teams:", teams.map(t => `${t.name} (${t.id})`));
 
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur border-b border-border px-4 py-3">
@@ -27,7 +33,10 @@ export default function Header() {
           <select
             className="h-9 rounded-lg border border-border bg-card px-2 text-sm"
             value={currentTeam?.id ?? ""}
-            onChange={(e) => setTeam(e.target.value)}
+            onChange={(e) => {
+              console.log("Header: Team switcher changed to:", e.target.value);
+              setTeam(e.target.value);
+            }}
             aria-label="Switch team"
           >
             {teams.map((t) => (
@@ -43,7 +52,7 @@ export default function Header() {
           <Link className={linkCls(pathname.startsWith("/dashboard"))} to="/dashboard">Dashboard</Link>
         </nav>
         <ThemeToggle />
-        <InboxButton/>
+        {session && currentTeam && <InboxButton/>}
       </div>
     </header>
   );

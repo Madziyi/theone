@@ -11,6 +11,9 @@ import BottomNav from "@/components/BottomNav";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ParameterDetailPage from "@/pages/ParameterDetailPage";
 import SpatialDeltaDetailPage from "@/pages/SpatialDeltaDetail";
+import OperationsHistoryPage from "@/pages/OperationsHistoryPage";
+import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
+import SupportPage from "@/pages/SupportPage";
 
 
 export default function App() {
@@ -45,9 +48,21 @@ export default function App() {
             path="/dashboard"
             element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="/operations/history/:buoyId"
+            element={<ProtectedRoute><OperationsHistoryPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/privacy"
+            element={<PrivacyPolicyPage />}
+          />
+          <Route
+            path="/support"
+            element={<SupportPage />}
+          />
           <Route path="/parameter/:buoyId/:paramId" element={<ParameterDetailPage />} />
           <Route path="/alerts/spatial/:alertId" element={<SpatialDeltaDetailPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
       <BottomNav />

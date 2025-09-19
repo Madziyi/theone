@@ -3,15 +3,17 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useTeam } from "@/contexts/TeamContext";
+import { useSession } from "@/hooks/useSession";
 import InboxDrawer from "@/components/Inbox/InboxDrawer";
 
 export default function InboxButton() {
   const { currentTeamId } = useTeam();
+  const { session } = useSession();
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(0);
 
   const refreshUnread = useCallback(async () => {
-    if (!currentTeamId) {
+    if (!session || !currentTeamId) {
       setCount(0);
       return;
     }
@@ -19,7 +21,7 @@ export default function InboxButton() {
       p_team: currentTeamId,
     });
     if (!error) setCount(data ?? 0);
-  }, [currentTeamId]);
+  }, [session, currentTeamId]);
 
   useEffect(() => {
     let mounted = true;
@@ -33,7 +35,7 @@ export default function InboxButton() {
 
   // Realtime: bump badge when a new inbox message is inserted for this team
   useEffect(() => {
-    if (!currentTeamId) return;
+    if (!session || !currentTeamId) return;
     const ch = supabase
       .channel("inbox-badge")
       .on(
@@ -48,7 +50,7 @@ export default function InboxButton() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [currentTeamId, refreshUnread]);
+  }, [session, currentTeamId, refreshUnread]);
 
   return (
     <>
@@ -70,8 +72,6 @@ export default function InboxButton() {
         onClose={() => setOpen(false)}
         // Called by the drawer after a successful acknowledge.
         onAcknowledge={() => setCount((c) => Math.max(0, c - 1))}
-        // In case of bulk ops or external mutations inside the drawer
-        onRefresh={refreshUnread}
       />
     </>
   );

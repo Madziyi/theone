@@ -555,6 +555,17 @@ export default function Login() {
           <p className="pt-1 text-xs text-muted">Tip: Check your spam/junk folder.</p>
         </div>
       )}
+      
+      {/* Footer Links */}
+      <div className="mt-8 pt-4 border-t border-border text-center">
+        <div className="flex justify-center gap-4 text-sm text-muted">
+          <a href="/support" className="hover:text-foreground">Support</a>
+          <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
+        </div>
+        <p className="mt-2 text-xs text-muted">
+          © 2025 T & E Lab
+        </p>
+      </div>
     </div>
   );
 }

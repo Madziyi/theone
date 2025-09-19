@@ -372,7 +372,7 @@ function MonitorHeaderExtras() {
 
 /* ---------- main component ---------- */
 export default function Monitor() {
-  const { currentTeamId, isManager } = useTeam();
+  const { currentTeamId, isManager, loading: teamLoading } = useTeam();
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [buoys, setBuoys] = useState<Buoy[]>([]);
@@ -491,9 +491,11 @@ export default function Monitor() {
 
   /* team buoys + tiles (team or global) */
   useEffect(() => {
-    if (!currentTeamId) return;
+    console.log("MonitorPage: useEffect triggered - teamLoading:", teamLoading, "currentTeamId:", currentTeamId);
+    if (teamLoading || !currentTeamId) return;
     let cancelled = false;
     (async () => {
+      console.log("MonitorPage: Starting to fetch monitor data for team:", currentTeamId);
       setLoading(true);
       const { data: tb, error: e1 } = await supabase
         .from("team_buoys")
@@ -547,7 +549,7 @@ export default function Monitor() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [currentTeamId]);
+  }, [currentTeamId, teamLoading]);
 
   /* params for all tiles */
   useEffect(() => {

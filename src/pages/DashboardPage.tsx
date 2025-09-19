@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AlertsPanel from "@/components/Alerts/AlertsPanel";
 import { X as CloseIcon } from "lucide-react";
 import DownloadCenterPanel from "@/components/DownloadCenter/DownloadCenterPanel";
+import OperationsPanel from "@/components/Operations/OperationsPanel";
 
 type Buoy = {
   id: number;
@@ -312,7 +313,7 @@ export default function DashboardPage() {
   const { currentTeam, currentTeamId, isManager, loading: teamLoading, teams } = useTeam(); // isManager == admin
   const isAdmin = !!isManager;
 
-  const [activeTab, setActiveTab] = useState<"buoys" | "alerts" | "downloads" | "team" | "admin">("buoys");
+  const [activeTab, setActiveTab] = useState<"buoys" | "alerts" | "downloads" | "operations" | "team" | "admin">("buoys");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [teamBuoys, setTeamBuoys] = useState<Buoy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -405,6 +406,16 @@ export default function DashboardPage() {
               {t === "buoys" ? "Buoys" : t === "alerts" ? "Alerts" : t === "downloads" ? "Documents" : "Team"}
             </button>
           ))}
+          {currentTeam?.is_operations && (
+            <button
+              className={`h-9 rounded-lg px-3 text-sm border ${
+                activeTab === "operations" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"
+              }`}
+              onClick={() => setActiveTab("operations")}
+            >
+              Operations
+            </button>
+          )}
           {isAdmin && (
             <button
               className={`h-9 rounded-lg px-3 text-sm border ${
@@ -466,7 +477,11 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-4 text-sm">
+                <Link to="/support" className="text-muted hover:text-foreground">Support</Link>
+                <Link to="/privacy" className="text-muted hover:text-foreground">Privacy</Link>
+              </div>
               <button onClick={signOut} className="text-white h-9 rounded-lg border border-border bg-card px-3 text-sm bg-primary hover:bg-accent/30" title="Sign out">
                 Sign out
               </button>
@@ -527,6 +542,17 @@ export default function DashboardPage() {
             <DownloadCenterPanel autoOpenId={openDownloadId} />
           ) : (
             <div className="text-sm text-muted">You are not a member of any teams.</div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "operations" && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">Operations</h2>
+          {currentTeamId && currentTeam?.is_operations ? (
+            <OperationsPanel />
+          ) : (
+            <div className="text-sm text-muted">Operations access not available for this team.</div>
           )}
         </div>
       )}
