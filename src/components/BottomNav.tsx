@@ -29,10 +29,10 @@ function BrandCenter() {
     <li className="relative -mt-6 flex flex-col items-center justify-end">
       <NavLink to="/" aria-label="Home">
         <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-blue-500 to-violet-500 text-white font-semibold shadow-soft">
-          T&amp;E
+          D
         </span>
       </NavLink>
-      <span className="mt-1 text-[10px] font-semibold tracking-wide text-muted select-none">T&amp;E</span>
+      <span className="mt-1 text-[10px] font-semibold tracking-wide text-muted select-none">Dashboard</span>
     </li>
   );
 }
@@ -48,9 +48,9 @@ export default function BottomNav() {
       aria-label="Primary"
     >
       <div className="mx-auto max-w-7xl">
-        <ul className="grid grid-cols-5 items-end h-16 px-2 pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid grid-cols-4 items-end h-16 px-2 pb-[env(safe-area-inset-bottom)]">
           <NavItem to="/monitor" label="Monitor" Icon={BarChart3} />
-          <NavItem to="/" label="Map" Icon={MapIcon} />
+          {/*<NavItem to="/" label="Map" Icon={MapIcon} />*/}
           <BrandCenter />
           <NavItem to="/trends" label="Trends" Icon={TrendingUp} />
           <NavItem to="/dashboard" label="Dashboard" Icon={UserRound} />

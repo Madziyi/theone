@@ -25,31 +25,65 @@ export function ScheduleModal({ buoy_id, onClose }: ScheduleModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
-      <form onSubmit={onSubmit} className="w-full max-w-md bg-white rounded-2xl p-4 space-y-3">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[1200]">
+      <form onSubmit={onSubmit} className="w-full max-w-md bg-card border border-border rounded-2xl p-6 space-y-4 shadow-lg">
         <h2 className="text-lg font-semibold">Schedule maintenance for #{buoy_id}</h2>
-        <label className="block">
-          <span className="text-sm text-slate-600">Target status</span>
-          <select className="mt-1 w-full border rounded-md p-2" value={target} onChange={e=>setTarget(e.target.value as any)}>
-            <option value="inactive">Inactive</option>
-            <option value="retrieved">Retrieved</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-600">Start</span>
-          <input type="datetime-local" className="mt-1 w-full border rounded-md p-2" value={startAt} onChange={e=>setStartAt(e.target.value)} required/>
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-600">End (optional)</span>
-          <input type="datetime-local" className="mt-1 w-full border rounded-md p-2" value={endAt} onChange={e=>setEndAt(e.target.value)} />
-        </label>
-        <label className="block">
-          <span className="text-sm text-slate-600">Reason</span>
-          <textarea className="mt-1 w-full border rounded-md p-2" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Brief reason (required for non-active)"/>
-        </label>
-        <div className="flex items-center justify-end gap-2">
-          <button type="button" className="px-3 py-1.5 rounded-md border" onClick={onClose}>Cancel</button>
-          <button type="submit" className="px-3 py-1.5 rounded-md bg-black text-white">Schedule</button>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">Target status</label>
+            <select 
+              className="w-full border border-border rounded-md p-2 bg-background text-foreground" 
+              value={target} 
+              onChange={e=>setTarget(e.target.value as any)}
+            >
+              <option value="inactive">Inactive</option>
+              <option value="retrieved">Retrieved</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">Start</label>
+            <input 
+              type="datetime-local" 
+              className="w-full border border-border rounded-md p-2 bg-background text-foreground" 
+              value={startAt} 
+              onChange={e=>setStartAt(e.target.value)} 
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">End (optional)</label>
+            <input 
+              type="datetime-local" 
+              className="w-full border border-border rounded-md p-2 bg-background text-foreground" 
+              value={endAt} 
+              onChange={e=>setEndAt(e.target.value)} 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-muted-foreground mb-2">Reason</label>
+            <textarea 
+              className="w-full border border-border rounded-md p-2 bg-background text-foreground resize-none" 
+              value={reason} 
+              onChange={e=>setReason(e.target.value)} 
+              placeholder="Brief reason (required for non-active)"
+              rows={3}
+            />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <button 
+            type="button" 
+            className="px-4 py-2 rounded-lg border border-border bg-background text-foreground hover:bg-muted" 
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button 
+            type="submit" 
+            className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90"
+          >
+            Schedule
+          </button>
         </div>
       </form>
     </div>

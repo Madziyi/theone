@@ -9,9 +9,9 @@ export default function OperationsPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4">
-        <div>
-          <div className="flex items-center justify-between mb-2">
+      <div className="space-y-3">        
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-md font-medium">Status Management</h3>
             <button 
               className="px-3 py-1.5 rounded-md bg-primary text-white text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -25,8 +25,8 @@ export default function OperationsPanel() {
         </div>
 
         {selectedBuoyId && (
-          <div>
-            <h3 className="text-md font-medium mb-2">Maintenance Schedules for Buoy #{selectedBuoyId}</h3>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
+            <h3 className="text-md font-medium mb-4">Maintenance Schedules for Buoy #{selectedBuoyId}</h3>
             <SchedulesList buoy_id={selectedBuoyId} />
           </div>
         )}

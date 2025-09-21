@@ -29,6 +29,7 @@ type Ctx = {
   signUp: (args: SignUpArgs) => Promise<void>;
   signIn: (args: SignInArgs) => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 };
 
 const AuthContext = createContext<Ctx | null>(null);
@@ -98,8 +99,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  const deleteAccount = async () => {
+    if (!user) throw new Error("No user logged in");
+    
+    // Remove user from all teams
+    const { error: teamsError } = await supabase
+      .from("team_members")
+      .delete()
+      .eq("user_id", user.id);
+    
+    if (teamsError) throw teamsError;
+    
+    // Delete user profile
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .delete()
+      .eq("id", user.id);
+    
+    if (profileError) throw profileError;
+    
+    // Sign out the user (this will also clear localStorage)
+    await signOut();
+  };
+
   const value = useMemo<Ctx>(
-    () => ({ user, session, loading, signUp, signIn, signOut }),
+    () => ({ user, session, loading, signUp, signIn, signOut, deleteAccount }),
     [user, session, loading]
   );
 

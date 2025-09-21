@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { listOpsBuoys, opsSetStatus, BuoyRow } from '@/api/operations';
-import { StatusBadge } from './StatusBadge';
 
 interface OperationsStatusTableProps {
   onBuoySelect?: (buoyId: number | null) => void;
@@ -36,35 +35,43 @@ export function OperationsStatusTable({ onBuoySelect, selectedBuoyId }: Operatio
   }
 
   return (
-    <div className="rounded-xl border bg-white">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-slate-600">
-          <tr>
-            <th className="px-3 py-2 text-left">Select</th>
-            <th className="px-3 py-2 text-left">Buoy</th>
-            <th className="px-3 py-2 text-left">Status</th>
-            <th className="px-3 py-2 text-left">Last Change</th>
-            <th className="px-3 py-2 text-left"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.buoy_id} className={`border-t ${selectedBuoyId === r.buoy_id ? 'bg-blue-50' : ''}`}>
-              <td className="px-3 py-2">
-                <input
-                  type="radio"
-                  name="selectedBuoy"
-                  checked={selectedBuoyId === r.buoy_id}
-                  onChange={() => onBuoySelect?.(r.buoy_id)}
-                  className="rounded"
-                />
-              </td>
-              <td className="px-3 py-2">{r.name} <span className="text-xs text-slate-400">#{r.buoy_id}</span></td>
-              <td className="px-3 py-2">
-                <div className="inline-flex items-center gap-2">
-                  <StatusBadge status={r.status}/>
+    <div className="rounded-lg border border-border overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Select</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Buoy</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Last Change</th>
+              <th className="px-3 py-2 text-left font-medium text-muted-foreground"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.buoy_id} className={`border-t border-border hover:bg-muted/50 ${selectedBuoyId === r.buoy_id ? 'bg-accent/50' : ''}`}>
+                <td className="px-3 py-2">
+                  <input
+                    type="radio"
+                    name="selectedBuoy"
+                    checked={selectedBuoyId === r.buoy_id}
+                    onChange={() => onBuoySelect?.(r.buoy_id)}
+                    className="rounded border-border"
+                  />
+                </td>
+                <td className="px-3 py-2 min-w-[120px]">
+                  <div className="font-medium">{r.name}</div>
+                  <div className="text-xs text-muted-foreground">#{r.buoy_id}</div>
+                </td>
+                <td className="px-3 py-2 min-w-[140px]">
                   <select
-                    className="px-2 py-1 border rounded-md bg-white"
+                    className={`w-full px-2 py-1 border rounded-md bg-background text-foreground transition-all duration-200 hover:scale-105 ${
+                      r.status === 'active' 
+                        ? 'border-green-500/50 shadow-[0_0_0_1px_rgba(34,197,94,0.3)] shadow-green-500/20 hover:shadow-[0_0_0_2px_rgba(34,197,94,0.4)] hover:shadow-green-500/30' 
+                        : r.status === 'inactive' 
+                        ? 'border-yellow-500/50 shadow-[0_0_0_1px_rgba(234,179,8,0.3)] shadow-yellow-500/20 hover:shadow-[0_0_0_2px_rgba(234,179,8,0.4)] hover:shadow-yellow-500/30'
+                        : 'border-gray-500/50 shadow-[0_0_0_1px_rgba(107,114,128,0.3)] shadow-gray-500/20 hover:shadow-[0_0_0_2px_rgba(107,114,128,0.4)] hover:shadow-gray-500/30'
+                    }`}
                     value={r.status}
                     disabled={busy === r.buoy_id}
                     onChange={(e) => onChange(r, e.target.value as BuoyRow['status'])}
@@ -73,16 +80,19 @@ export function OperationsStatusTable({ onBuoySelect, selectedBuoyId }: Operatio
                     <option value="inactive">Inactive</option>
                     <option value="retrieved">Retrieved</option>
                   </select>
-                </div>
-              </td>
-              <td className="px-3 py-2">{new Date(r.status_changed_at).toLocaleString()}</td>
-              <td className="px-3 py-2 text-right">
-                <Link className="text-sm underline text-primary hover:text-primary/80" to={`/operations/history/${r.buoy_id}`}>History</Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                </td>
+                <td className="px-3 py-2 text-muted-foreground min-w-[140px]">
+                  <div className="text-xs">{new Date(r.status_changed_at).toLocaleDateString()}</div>
+                  <div className="text-xs">{new Date(r.status_changed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <Link className="text-sm underline text-primary hover:text-primary/80 whitespace-nowrap" to={`/operations/history/${r.buoy_id}`}>History</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

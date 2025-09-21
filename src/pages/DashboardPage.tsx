@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useTeam } from "@/contexts/TeamContext";
 import { useSession } from "@/hooks/useSession";
+import { useAuth } from "@/contexts/AuthContext";
 import BuoyStats from "@/components/Buoy/BuoyStats";
 import { Link, useNavigate } from "react-router-dom";
 import AlertsPanel from "@/components/Alerts/AlertsPanel";
@@ -119,46 +120,52 @@ function TeamMembersAdminPanel() {
     <div className="mt-4">
       <div className="mb-2 text-sm font-semibold">Team members</div>
       <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-card/70">
-            <tr className="[&>th]:px-3 [&>th]:py-2 text-left">
-              <th>Name</th>
-              <th>Email</th>
-              <th className="w-28">Role</th>
-              <th className="w-24"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={4} className="p-3 text-muted">Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={4} className="p-3 text-muted">No members yet.</td></tr>
-            ) : rows.map((r) => (
-              <tr key={r.user_id} className="border-t border-border">
-                <td className="px-3 py-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
-                <td className="px-3 py-2">{r.email}</td>
-                <td className="px-3 py-2">
-                  <select
-                    className="h-8 rounded-md border border-border bg-background px-2"
-                    value={r.role}
-                    onChange={(e) => setRole(r.user_id, e.target.value as any)}
-                  >
-                    <option value="member">member</option>
-                    <option value="admin">admin</option>
-                  </select>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <button
-                    className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30"
-                    onClick={() => removeMember(r.user_id)}
-                  >
-                    Remove
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
+            <thead className="bg-card/70">
+              <tr className="[&>th]:px-3 [&>th]:py-2 text-left">
+                <th className="min-w-[120px]">Name</th>
+                <th className="min-w-[180px]">Email</th>
+                <th className="w-28">Role</th>
+                <th className="w-24"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={4} className="p-3 text-muted">Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={4} className="p-3 text-muted">No members yet.</td></tr>
+              ) : rows.map((r) => (
+                <tr key={r.user_id} className="border-t border-border">
+                  <td className="px-3 py-2">
+                    <div className="font-medium">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="text-sm break-all">{r.email}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <select
+                      className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
+                      value={r.role}
+                      onChange={(e) => setRole(r.user_id, e.target.value as any)}
+                    >
+                      <option value="member">member</option>
+                      <option value="admin">admin</option>
+                    </select>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30 whitespace-nowrap"
+                      onClick={() => removeMember(r.user_id)}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -202,36 +209,42 @@ function TeamMembersPanel() {
     <div className="mt-4">
       <div className="mb-2 text-sm font-semibold">Team members</div>
       <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-card/70">
-            <tr className="[&>th]:px-3 [&>th]:py-2 text-left">
-              <th>Name</th>
-              <th>Email</th>
-              <th className="w-28">Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={3} className="p-3 text-muted">Loading…</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td colSpan={3} className="p-3 text-muted">No members yet.</td></tr>
-            ) : rows.map((r) => (
-              <tr key={r.user_id} className="border-t border-border">
-                <td className="px-3 py-2">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</td>
-                <td className="px-3 py-2">{r.email}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                    r.role === "admin"
-                      ? "border-purple-500/30 bg-purple-500/15 text-purple-400"
-                      : "border-sky-500/30 bg-sky-500/15 text-sky-400"
-                  }`}>
-                    {r.role}
-                  </span>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[400px]">
+            <thead className="bg-card/70">
+              <tr className="[&>th]:px-3 [&>th]:py-2 text-left">
+                <th className="min-w-[120px]">Name</th>
+                <th className="min-w-[180px]">Email</th>
+                <th className="w-28">Role</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={3} className="p-3 text-muted">Loading…</td></tr>
+              ) : rows.length === 0 ? (
+                <tr><td colSpan={3} className="p-3 text-muted">No members yet.</td></tr>
+              ) : rows.map((r) => (
+                <tr key={r.user_id} className="border-t border-border">
+                  <td className="px-3 py-2">
+                    <div className="font-medium">{[r.first_name, r.last_name].filter(Boolean).join(" ") || "—"}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="text-sm break-all">{r.email}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                      r.role === "admin"
+                        ? "border-purple-500/30 bg-purple-500/15 text-purple-400"
+                        : "border-sky-500/30 bg-sky-500/15 text-sky-400"
+                    }`}>
+                      {r.role}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -253,15 +266,20 @@ function RotateTeamCodeButton() {
   if (!isAdmin) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
       <button
-        className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30"
+        className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30 whitespace-nowrap"
         onClick={rotate}
         disabled={rotating}
       >
         {rotating ? "Rotating…" : "Rotate team code"}
       </button>
-      {code && <span className="text-xs text-muted">New code: <b className="font-mono">{code}</b></span>}
+      {code && (
+        <span className="text-xs text-muted">
+          <span className="hidden sm:inline">New code: </span>
+          <b className="font-mono">{code}</b>
+        </span>
+      )}
     </div>
   );
 }
@@ -310,6 +328,7 @@ function WebcamModal({ src, onClose }: { src: string; onClose: () => void }) {
 export default function DashboardPage() {
   const nav = useNavigate();
   const { session } = useSession();
+  const { deleteAccount } = useAuth();
   const { currentTeam, currentTeamId, isManager, loading: teamLoading, teams } = useTeam(); // isManager == admin
   const isAdmin = !!isManager;
 
@@ -319,6 +338,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Buoy | null>(null);
   const [showWebcam, setShowWebcam] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -368,6 +388,16 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    try {
+      await deleteAccount();
+      // After successful deletion, the user will be signed out and redirected
+    } catch (error) {
+      console.error("Failed to delete account:", error);
+      alert("Failed to delete account. Please try again.");
+    }
+  };
+
   const openDownloadId = new URLSearchParams(location.search).get("open");
 
   return (
@@ -395,10 +425,10 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div className="rounded-xl border border-border bg-card p-2">
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {(["buoys","alerts","downloads","team"] as const).map((t) => (
             <button key={t}
-              className={`h-9 rounded-lg px-3 text-sm border ${
+              className={`h-9 rounded-lg px-3 text-sm border whitespace-nowrap flex-shrink-0 ${
                 activeTab === t ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"
               }`}
               onClick={() => setActiveTab(t)}
@@ -408,7 +438,7 @@ export default function DashboardPage() {
           ))}
           {currentTeam?.is_operations && (
             <button
-              className={`h-9 rounded-lg px-3 text-sm border ${
+              className={`h-9 rounded-lg px-3 text-sm border whitespace-nowrap flex-shrink-0 ${
                 activeTab === "operations" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"
               }`}
               onClick={() => setActiveTab("operations")}
@@ -418,7 +448,7 @@ export default function DashboardPage() {
           )}
           {isAdmin && (
             <button
-              className={`h-9 rounded-lg px-3 text-sm border ${
+              className={`h-9 rounded-lg px-3 text-sm border whitespace-nowrap flex-shrink-0 ${
                 activeTab === "admin" ? "bg-primary text-white border-border" : "bg-background border-border text-foreground hover:bg-accent/30"
               }`}
               onClick={() => setActiveTab("admin")}
@@ -477,14 +507,23 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex gap-4 text-sm">
                 <Link to="/support" className="text-muted hover:text-foreground">Support</Link>
                 <Link to="/privacy" className="text-muted hover:text-foreground">Privacy</Link>
               </div>
-              <button onClick={signOut} className="text-white h-9 rounded-lg border border-border bg-card px-3 text-sm bg-primary hover:bg-accent/30" title="Sign out">
-                Sign out
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowDeleteConfirm(true)} 
+                  className="h-9 rounded-lg border border-border bg-card px-3 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30 whitespace-nowrap" 
+                  title="Delete account"
+                >
+                  Delete Account
+                </button>
+                <button onClick={signOut} className="text-white h-9 rounded-lg border border-border bg-card px-3 text-sm bg-primary hover:bg-accent/30 whitespace-nowrap" title="Sign out">
+                  Sign out
+                </button>
+              </div>
             </div>
 
             {selected && (
@@ -580,7 +619,7 @@ export default function DashboardPage() {
           
           {/* Admin tools */}
           <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <h2 className="text-lg font-semibold">Admin tools</h2>
               {/* Optional: rotate team code */}
               <RotateTeamCodeButton />
@@ -588,6 +627,34 @@ export default function DashboardPage() {
 
             {/* Members management (admin only) */}
             <TeamMembersAdminPanel />
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[1200] bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-border p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Delete Account
+            </h3>
+            <p className="text-gray-600 dark:text-gray-300 mb-6">
+              Are you sure you want to delete your account? This action cannot be undone. You will be removed from all teams and your profile will be permanently deleted.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+              >
+                Delete Account
+              </button>
+            </div>
           </div>
         </div>
       )}

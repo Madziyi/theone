@@ -179,7 +179,7 @@ function AdminInvitesPanel({ teamId }: { teamId: string }) {
         <h3 className="text-lg font-semibold">Admin • Team Invites</h3>
         <button onClick={loadRows} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30">Refresh</button>
       </div>
-      <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <input
           type="email"
           placeholder="invitee@example.com"
@@ -196,9 +196,10 @@ function AdminInvitesPanel({ teamId }: { teamId: string }) {
           type="number"
           min={5}
           step={5}
-          className="h-10 w-24 rounded-lg border border-border bg-background px-3 text-sm"
+          className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
           value={mins}
           onChange={(e) => setMins(Number(e.target.value))}
+          placeholder="Minutes"
         />
         <button className="h-10 rounded-lg border border-border bg-primary px-4 text-sm text-white" onClick={createLink} disabled={busy || !email}>
           {busy ? "Creating…" : "Create link"}
@@ -266,14 +267,14 @@ function AdminInvitesPanel({ teamId }: { teamId: string }) {
           <div className="mt-3 text-sm text-muted">No members yet.</div>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-full text-sm" style={{ minWidth: '700px' }}>
               <thead>
                 <tr className="text-left text-muted">
-                  <th className="px-2 py-2">Name</th>
-                  <th className="px-2 py-2">Email</th>
-                  <th className="px-2 py-2">Role</th>
-                  <th className="px-2 py-2">Joined</th>
-                  <th className="px-2 py-2 text-right">Actions</th>
+                  <th className="px-2 py-2 min-w-[120px]">Name</th>
+                  <th className="px-2 py-2 min-w-[180px]">Email</th>
+                  <th className="px-2 py-2 w-20">Role</th>
+                  <th className="px-2 py-2 min-w-[120px]">Joined</th>
+                  <th className="px-2 py-2 text-right min-w-[200px]">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -282,8 +283,12 @@ function AdminInvitesPanel({ teamId }: { teamId: string }) {
                   const joined = m.joined_at ? new Date(m.joined_at).toLocaleString([], { hour12: false }) : "—";
                   return (
                     <tr key={m.user_id} className="border-t border-border/60">
-                      <td className="px-2 py-2">{name}</td>
-                      <td className="px-2 py-2">{m.profile?.email ?? "—"}</td>
+                      <td className="px-2 py-2">
+                        <div className="font-medium">{name}</div>
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="text-sm break-all">{m.profile?.email ?? "—"}</div>
+                      </td>
                       <td className="px-2 py-2">
                         <span
                           className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
@@ -295,33 +300,37 @@ function AdminInvitesPanel({ teamId }: { teamId: string }) {
                           {m.role}
                         </span>
                       </td>
-                      <td className="px-2 py-2">{joined}</td>
-                      <td className="px-2 py-2 text-right space-x-1">
-                        {m.role === "member" ? (
+                      <td className="px-2 py-2">
+                        <div className="text-xs">{joined}</div>
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <div className="flex flex-col sm:flex-row gap-1 sm:space-x-1">
+                          {m.role === "member" ? (
+                            <button
+                              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30 whitespace-nowrap"
+                              onClick={() => promote(m.user_id)}
+                            >
+                              Promote
+                            </button>
+                          ) : (
+                            <button
+                              className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30 whitespace-nowrap"
+                              onClick={() => demote(m.user_id)}
+                              disabled={isLastAdmin(m.user_id)}
+                              title={isLastAdmin(m.user_id) ? "Cannot demote last admin" : "Demote"}
+                            >
+                              Demote
+                            </button>
+                          )}
                           <button
-                            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30"
-                            onClick={() => promote(m.user_id)}
+                            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30 whitespace-nowrap"
+                            onClick={() => removeMember(m.user_id)}
+                            disabled={m.user_id === me && isLastAdmin(m.user_id)}
+                            title={m.user_id === me && isLastAdmin(m.user_id) ? "Cannot remove last admin (you)" : "Remove from team"}
                           >
-                            Promote to admin
+                            Remove
                           </button>
-                        ) : (
-                          <button
-                            className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30"
-                            onClick={() => demote(m.user_id)}
-                            disabled={isLastAdmin(m.user_id)}
-                            title={isLastAdmin(m.user_id) ? "Cannot demote last admin" : "Demote"}
-                          >
-                            Demote to member
-                          </button>
-                        )}
-                        <button
-                          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/30"
-                          onClick={() => removeMember(m.user_id)}
-                          disabled={m.user_id === me && isLastAdmin(m.user_id)}
-                          title={m.user_id === me && isLastAdmin(m.user_id) ? "Cannot remove last admin (you)" : "Remove from team"}
-                        >
-                          Remove
-                        </button>
+                        </div>
                       </td>
                     </tr>
                   );

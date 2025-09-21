@@ -7,15 +7,15 @@ interface StatusBadgeProps {
 export function StatusBadge({ status }: StatusBadgeProps) {
   const config = {
     active: {
-      className: "bg-green-100 text-green-800 border-green-200",
+      className: "bg-green-500/10 text-green-600 border-green-500/20 dark:text-green-400 dark:bg-green-500/10 dark:border-green-500/20",
       label: "Active"
     },
     inactive: {
-      className: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      className: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20 dark:text-yellow-400 dark:bg-yellow-500/10 dark:border-yellow-500/20",
       label: "Inactive"
     },
     retrieved: {
-      className: "bg-gray-100 text-gray-800 border-gray-200",
+      className: "bg-muted text-muted-foreground border-border",
       label: "Retrieved"
     }
   };
