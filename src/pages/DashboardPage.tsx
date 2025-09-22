@@ -465,9 +465,6 @@ export default function DashboardPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Your buoys</h2>
-              <Link to="/" className="text-sm text-white bg-primary rounded-lg border border-border bg-card px-3 py-1.5 hover:bg-accent/30" title="Open map">
-                Open map
-              </Link>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
