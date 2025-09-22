@@ -27,9 +27,13 @@ export default function PrivacyPolicyPage() {
         <h2 className="text-2xl font-semibold text-foreground mb-4">1. Information We Collect</h2>
 
         <h3 className="text-xl font-medium text-foreground mb-3">a. Personal Information</h3>
-        <p className="mb-4">We may collect limited personal information, such as:</p>
+        <p className="mb-4">When you create an account, we collect the following personal information:</p>
         <ul className="list-disc pl-6 mb-6">
-          <li><strong>Email address</strong> (used for sending alerts or managing your account)</li>
+          <li><strong>First name and last name</strong></li>
+          <li><strong>Email address</strong></li>
+          <li><strong>Password</strong></li>
+          <li><strong>Phone number</strong></li>
+          <li><strong>Profession</strong></li>
         </ul>
 
         <h3 className="text-xl font-medium text-foreground mb-3">b. Device and Usage Data</h3>
