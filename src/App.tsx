@@ -14,6 +14,7 @@ import SpatialDeltaDetailPage from "@/pages/SpatialDeltaDetail";
 import OperationsHistoryPage from "@/pages/OperationsHistoryPage";
 import PrivacyPolicyPage from "@/pages/PrivacyPolicyPage";
 import SupportPage from "@/pages/SupportPage";
+import AccountDeletionRequestPage from "@/pages/AccountDeletionRequestPage";
 
 
 export default function App() {
@@ -59,6 +60,10 @@ export default function App() {
           <Route
             path="/support"
             element={<SupportPage />}
+          />
+          <Route
+            path="/requestdelete"
+            element={<AccountDeletionRequestPage />}
           />
           <Route path="/parameter/:buoyId/:paramId" element={<ParameterDetailPage />} />
           <Route path="/alerts/spatial/:alertId" element={<SpatialDeltaDetailPage />} />

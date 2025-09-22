@@ -561,6 +561,7 @@ export default function Login() {
         <div className="flex justify-center gap-4 text-sm text-muted">
           <a href="/support" className="hover:text-foreground">Support</a>
           <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
+          <a href="/requestdelete" className="hover:text-foreground">Request Account Deletion</a>
         </div>
         <p className="mt-2 text-xs text-muted">
           © 2025 T & E Lab
