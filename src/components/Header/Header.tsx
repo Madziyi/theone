@@ -45,7 +45,7 @@ export default function Header() {
           </select>
         )}
 
-        <nav className="hidden xl:flex items-center gap-3">
+        <nav className="hidden lg:flex items-center gap-3">
           <Link className={linkCls(pathname === "/")} to="/">Map</Link>
           <Link className={linkCls(pathname.startsWith("/trends"))} to="/trends">Trends</Link>
           <Link className={linkCls(pathname.startsWith("/monitor"))} to="/monitor">Monitor</Link>

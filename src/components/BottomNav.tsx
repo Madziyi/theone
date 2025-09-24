@@ -41,7 +41,7 @@ export default function BottomNav() {
   return (
     <nav
       className={cn(
-        "fixed inset-x-0 bottom-0 z-40 xl:hidden",
+        "fixed inset-x-0 bottom-0 z-40 lg:hidden",
         "border-t border-border bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/75"
       )}
       role="navigation"
