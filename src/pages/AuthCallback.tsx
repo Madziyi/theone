@@ -16,20 +16,21 @@ export default function AuthCallback() {
         return;
       }
 
-      const invite = params.get("invite");
-      if (invite) {
-        // server-side add to team (no client write to team_members)
+      // Check if user has a pending team code from signup
+      const pendingTeamCode = data.user.user_metadata?.pending_team_code;
+      if (pendingTeamCode) {
         try {
-          const { error, data: joinRes } = await supabase.rpc("accept_team_invite", { p_code: invite });
-          if (error) console.error("accept_team_invite", error.message);
-          if (joinRes?.[0]?.team_id) {
-            localStorage.setItem("team_id", joinRes[0].team_id);
+          const { data: joinRes, error } = await supabase.rpc("join_team_by_code", { p_code: pendingTeamCode });
+          if (error) {
+            console.error("Failed to join team with code:", error);
+          } else if (joinRes) {
+            localStorage.setItem("team_id", joinRes);
+            console.log("Successfully joined team with code:", pendingTeamCode);
           }
         } catch (e) {
-          console.warn("Failed to accept invite", e);
+          console.warn("Failed to process team code during signup:", e);
         }
       }
-
 
       nav("/dashboard", { replace: true });
     })();

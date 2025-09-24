@@ -50,8 +50,7 @@ export default function BottomNav() {
       <div className="mx-auto max-w-7xl">
         <ul className="grid grid-cols-4 items-end h-16 px-2 pb-[env(safe-area-inset-bottom)]">
           <NavItem to="/monitor" label="Monitor" Icon={BarChart3} />
-          {/*<NavItem to="/" label="Map" Icon={MapIcon} />*/}
-          <BrandCenter />
+          <NavItem to="/" label="Map" Icon={MapIcon} />
           <NavItem to="/trends" label="Trends" Icon={TrendingUp} />
           <NavItem to="/dashboard" label="Dashboard" Icon={UserRound} />
         </ul>

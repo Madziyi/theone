@@ -45,7 +45,7 @@ export default function Login() {
   const nav = useNavigate();
   const [search] = useSearchParams();
 
-  // Determine initial tab and prefill from invite link
+  // Determine initial tab
   const initialMode = (search.get("mode") as Mode) || "signin";
   const [mode, setMode] = useState<Mode>(initialMode);
 
@@ -58,9 +58,8 @@ export default function Login() {
   const [profession, setProfession] = useState<Profession>(
     (search.get("profession") as Profession) ?? "student"
   );
+  const [teamCode, setTeamCode] = useState("");
 
-  // Optional team from invite link
-  const [pendingTeamId, setPendingTeamId] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,55 +80,13 @@ export default function Login() {
   // Where GoTrue should send users back after clicking the email confirmation link
   const redirectTo = useMemo(() => {
     const origin = window.location.origin; // "http://localhost:5173" in dev
-    const invite = search.get("invite");
-    // Carry invite code into the email verification deep link
-    return `${origin}/auth/callback${invite ? `?invite=${encodeURIComponent(invite)}` : ""}`;
-  }, [search]);
-
-  // Read any invite params from URL
-  useEffect(() => {
-    const t = search.get("team") || search.get("team_id") || null;
-    if (t) setPendingTeamId(t);
-    if (search.get("prefill") === "signup") setMode("signup");
-  }, [search]);
-
-
-  // NEW: resolve ?invite=ABC123 → pendingTeamId and prefill signup
-  useEffect(() => {
-    const inviteCode = search.get("invite");
-    if (!inviteCode) return;
-
-    (async () => {
-      try {
-        const { data, error } = await supabase.rpc("resolve_team_invite", { p_code: inviteCode });
-        if (error) throw error;
-        const row = (data as any[])?.[0];
-        if (row?.valid) {
-          setPendingTeamId(row.team_id);
-          setInfo(`You're joining: ${row.team_name}`);
-          setMode("signup");
-        } else {
-          setError("This invite link is invalid or expired.");
-        }
-      } catch (e: any) {
-        setError(e?.message ?? "Could not validate invite.");
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return `${origin}/auth/callback`;
   }, []);
 
+
   // After sign-in, ensure we have an active team id stored for the app
-  async function ensureActiveTeamForUser(userId: string, hintTeamId?: string | null) {
-    // use the hint or the metadata value purely to set local state
-    const { data } = await supabase.auth.getUser();
-    const metaTeam = (data?.user?.user_metadata as any)?.pending_team_id ?? null;
-    const chosen = hintTeamId || metaTeam || null;
-
-    if (chosen) {
-      localStorage.setItem("team_id", chosen);
-    }
-
-    // If nothing in storage yet, pick the first membership (server trigger likely added it)
+  async function ensureActiveTeamForUser(userId: string) {
+    // If nothing in storage yet, pick the first membership
     let active = localStorage.getItem("team_id");
     if (!active) {
       const { data: memberships } = await supabase
@@ -163,8 +120,8 @@ export default function Login() {
       let teamName: string | null = null;
 
       if (userId) {
-        // Ensure team context is ready (and possibly join invite team)
-        await ensureActiveTeamForUser(userId, pendingTeamId);
+        // Ensure team context is ready
+        await ensureActiveTeamForUser(userId);
 
         // Load profile first name for greeting
         const { data: prof } = await supabase
@@ -175,7 +132,7 @@ export default function Login() {
         userFirst = (prof as any)?.first_name ?? "";
 
         // Resolve active team id
-        const activeTeamId = pendingTeamId || localStorage.getItem("team_id") || null;
+        const activeTeamId = localStorage.getItem("team_id") || null;
 
         if (activeTeamId) {
           const { data: team } = await supabase
@@ -264,8 +221,8 @@ export default function Login() {
             last_name: lastName,
             phone_number: phoneNumber,
             profession,
-            // Let callback page auto-join the team
-            ...(pendingTeamId ? { pending_team_id: pendingTeamId } : {}),
+            // Store team code for processing after email verification
+            ...(teamCode.trim() ? { pending_team_code: teamCode.trim() } : {}),
           },
         },
       });
@@ -414,11 +371,6 @@ export default function Login() {
 
       {mode === "signup" && (
         <form onSubmit={handleSignUp} className="space-y-3 rounded-2xl border border-border p-4">
-          {pendingTeamId && (
-            <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-              You're joining a team by invite. Team ID: <span className="font-mono">{pendingTeamId}</span>
-            </div>
-          )}
           <div className="grid gap-1">
             <label className="text-sm">First name</label>
             <input
@@ -488,6 +440,20 @@ export default function Login() {
               <option value="utility_manager">Utility manager</option>
               <option value="environmental_personnel">Environmental personnel</option>
             </select>
+          </div>
+          <div className="grid gap-1">
+            <label className="text-sm">Team Code <span className="text-muted-foreground">(optional)</span></label>
+            <input
+              className="h-10 rounded-lg border border-border bg-background px-3"
+              type="text"
+              placeholder="e.g. ute253"
+              value={teamCode}
+              onChange={(e) => setTeamCode(e.target.value)}
+              disabled={busy}
+            />
+            <p className="text-xs text-muted-foreground">
+              Enter a team code to join a team immediately after signup
+            </p>
           </div>
           {error && (
             <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
