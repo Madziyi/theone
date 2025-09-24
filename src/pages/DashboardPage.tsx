@@ -425,7 +425,7 @@ export default function DashboardPage() {
 
       {/* Tabs */}
       <div className="rounded-xl border border-border bg-card p-2">
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 flex-wrap pb-1">
           {(["buoys","alerts","downloads","team"] as const).map((t) => (
             <button key={t}
               className={`h-9 rounded-lg px-3 text-sm border whitespace-nowrap flex-shrink-0 ${
